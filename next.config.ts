@@ -9,7 +9,16 @@ const withPWA = require("next-pwa")({
 
 const nextConfig: NextConfig = {
   turbopack: {},
-  /* config options here */
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+        // Removed 'search' and 'searchParams' as they are invalid here
+      },
+    ],
+  },
 };
 
 export default withPWA(nextConfig);

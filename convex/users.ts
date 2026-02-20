@@ -6,7 +6,7 @@ import type { Doc } from "./_generated/dataModel";
 
 const userRole = v.union(v.literal("admin"), v.literal("customer"));
 
-/** Register: creates customer account and session. Returns sessionToken + user (same as login). */
+/** Register: creates account and session. First user becomes admin, rest are customers. */
 export const register = mutation({
   args: {
     email: v.string(),
@@ -21,12 +21,13 @@ export const register = mutation({
       .withIndex("by_email", (q) => q.eq("email", email.toLowerCase()))
       .unique();
     if (existing) throw new Error("Email already registered");
+    const isFirstUser = (await ctx.db.query("users").first()) === null;
     const passwordHash = hashSync(password, 10);
     const now = Date.now();
     const userId = await ctx.db.insert("users", {
       email: email.toLowerCase(),
       name,
-      role: "customer",
+      role: isFirstUser ? "admin" : "customer",
       passwordHash,
       image,
       phone,

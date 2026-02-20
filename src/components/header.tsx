@@ -36,18 +36,28 @@ import {
   Heart,
   Bell,
   Search,
+  Info,
+  Mail,
+  Headphones,
+  LayoutDashboard,
 } from "lucide-react";
 
 const navLinks = [
   { href: "/", label: "Home", icon: Home },
   { href: "/shop", label: "Shop", icon: ShoppingBag },
   { href: "/categories", label: "Categories", icon: Tags },
+  { href: "/about", label: "About Us", icon: Info },
 ] as const;
 
 const sheetExtraLinks = [
   { href: "/cart", label: "Cart", icon: ShoppingCart },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/notifications", label: "Notifications", icon: Bell },
+] as const;
+
+const sheetHelpLinks = [
+  { href: "/contact", label: "Contact", icon: Mail },
+  { href: "/support", label: "Support", icon: Headphones },
 ] as const;
 
 export function Header() {
@@ -62,6 +72,8 @@ export function Header() {
     if (!sessionToken) return;
     await logout({ sessionToken });
     setSessionToken(null);
+    const { toast } = await import("sonner");
+    toast.success("Signed out");
     router.push("/");
     router.refresh();
   }
@@ -78,7 +90,7 @@ export function Header() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-8xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
           {/* Left: hamburger (mobile) + logo + desktop nav */}
           <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-6">
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -93,7 +105,16 @@ export function Header() {
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0 sm:max-w-[85vw]">
                 <SheetHeader className="border-b border-border p-4">
-                  <SheetTitle className="text-left">Menu</SheetTitle>
+                  <SheetTitle className="flex items-center gap-2 text-left font-semibold">
+                    <Image
+                      src="/logo-source.png"
+                      alt=""
+                      width={100}
+                      height={100}
+                      className="h-16 w-auto object-contain"
+                    />
+                    Ell&apos;s Import
+                  </SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col gap-1 p-4">
                   {navLinks.map(({ href, label, icon: Icon }) => (
@@ -118,6 +139,17 @@ export function Header() {
                       {label}
                     </Link>
                   ))}
+                  {sheetHelpLinks.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Icon className="size-5 shrink-0" />
+                      {label}
+                    </Link>
+                  ))}
                 </nav>
               </SheetContent>
             </Sheet>
@@ -126,8 +158,8 @@ export function Header() {
                 src="/logo-source.png"
                 alt="Ell's Import"
                 width={120}
-                height={48}
-                className="h-9 w-auto object-contain sm:h-10"
+                height={120}
+                className="h-14 w-auto object-contain"
               />
             </Link>
 
@@ -224,6 +256,24 @@ export function Header() {
                   <DropdownMenuItem asChild>
                     <Link href="/orders" className="flex items-center gap-2">
                       <Package className="size-4" /> Orders
+                    </Link>
+                  </DropdownMenuItem>
+                  {user?.role === "admin" && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" className="flex items-center gap-2">
+                        <LayoutDashboard className="size-4" /> Admin dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/contact" className="flex items-center gap-2">
+                      <Mail className="size-4" /> Contact
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/support" className="flex items-center gap-2">
+                      <Headphones className="size-4" /> Support
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
