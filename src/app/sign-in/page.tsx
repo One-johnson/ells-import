@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller } from "react-hook-form";
+import { toast } from "sonner";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function SignInPage() {
     try {
       const result = await login({ email: data.email.trim(), password: data.password });
       setSessionToken(result.sessionToken);
+      toast.success("Signed in successfully");
       router.push("/");
       router.refresh();
     } catch (err) {

@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller } from "react-hook-form";
+import { toast } from "sonner";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function SignUpPage() {
         phone: data.phone?.trim() || undefined,
       });
       setSessionToken(result.sessionToken);
+      toast.success("Account created successfully");
       router.push("/");
       router.refresh();
     } catch (err) {
