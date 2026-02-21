@@ -60,7 +60,7 @@ export function DataTable<TData, TValue>({
                 const canSort =
                   sortable &&
                   header.column.getCanSort() &&
-                  typeof header.column.columnDef.enableSorting !== "false";
+                  header.column.columnDef.enableSorting !== false;
                 return (
                   <TableHead key={header.id} className="whitespace-nowrap">
                     {canSort ? (
