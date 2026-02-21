@@ -51,7 +51,9 @@ export default function SignUpPage() {
       router.push("/");
       router.refresh();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Sign up failed");
+      const msg = err instanceof Error ? err.message : "Sign up failed";
+      setSubmitError(msg);
+      toast.error(msg);
     }
   }
 

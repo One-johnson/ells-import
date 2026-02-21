@@ -51,13 +51,16 @@ export const categories = defineTable({
 
 // ─── Products ─────────────────────────────────────────────────────────────
 export const productStatus = v.union(
-  v.literal("draft"),
-  v.literal("active"),
-  v.literal("archived"),
-  v.literal("out_of_stock")
+  v.literal("available"),
+  v.literal("new"),
+  v.literal("low_stock"),
+  v.literal("pre_order"),
+  v.literal("sold_out"),
+  v.literal("archived") // soft delete
 );
 
 export const products = defineTable({
+  productId: v.optional(v.string()), // 6-digit display id, auto-generated on create
   name: v.string(),
   slug: v.string(),
   description: v.string(),
@@ -74,7 +77,8 @@ export const products = defineTable({
   .index("by_slug", ["slug"])
   .index("by_status", ["status"])
   .index("by_status_created", ["status", "createdAt"])
-  .index("by_sku", ["sku"]);
+  .index("by_sku", ["sku"])
+  .index("by_productId", ["productId"]);
 
 // ─── Carts ────────────────────────────────────────────────────────────────
 export const cartItem = v.object({
