@@ -64,6 +64,35 @@ export const addItem = mutation({
   },
 });
 
+/** Update item quantity (remove if quantity <= 0). */
+export const updateItemQuantity = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    productId: v.id("products"),
+    quantity: v.number(),
+    priceSnapshot: v.number(),
+  },
+  handler: async (ctx, { sessionToken, productId, quantity, priceSnapshot }) => {
+    const user = await requireUser(ctx, sessionToken ?? null);
+    const cart = await ctx.db
+      .query("carts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (!cart) return null;
+    if (quantity <= 0) {
+      const items = cart.items.filter((i) => i.productId !== productId);
+      await ctx.db.patch(cart._id, { items, updatedAt: Date.now() });
+      return cart._id;
+    }
+    const idx = cart.items.findIndex((i) => i.productId === productId);
+    const items = [...cart.items];
+    if (idx >= 0) items[idx] = { productId, quantity, priceSnapshot };
+    else items.push({ productId, quantity, priceSnapshot });
+    await ctx.db.patch(cart._id, { items, updatedAt: Date.now() });
+    return cart._id;
+  },
+});
+
 /** Remove item from cart. */
 export const removeItem = mutation({
   args: {

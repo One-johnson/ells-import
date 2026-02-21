@@ -1,7 +1,9 @@
 import { HeroCarousel } from "@/components/hero-carousel";
+import { HomePromoBar } from "@/components/home-promo-bar";
 import { HomeValueProps } from "@/components/home-value-props";
-import { HomeCategories } from "@/components/home-categories";
 import { HomeFeaturedProducts } from "@/components/home-featured-products";
+import { HomeShopBy } from "@/components/home-shop-by";
+import { HomeCategories } from "@/components/home-categories";
 import { HomeNewsletterCta } from "@/components/home-newsletter-cta";
 import Link from "next/link";
 
@@ -9,31 +11,36 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       <HeroCarousel />
+      <HomePromoBar />
+
       <HomeValueProps />
-      <section className="mx-auto w-full max-w-6xl px-4 py-16 text-center sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Quality imports, delivered to your door
-        </h2>
-        <p className="mt-3 max-w-xl mx-auto text-muted-foreground">
-          Explore our curated selection of products from around the world. Fast shipping and easy returns.
+
+      <HomeFeaturedProducts />
+
+      <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 text-center">
+        <p className="text-muted-foreground">
+          Can&apos;t find it? Browse by category or get in touch.
         </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
           <Link
             href="/shop"
-            className="rounded-lg bg-[#5c4033] px-6 py-3 text-sm font-medium text-[#f5f0e8] transition-colors hover:bg-[#4a3328] dark:bg-[#8b6914] dark:hover:bg-[#7a5c12]"
+            className="rounded-lg bg-[#5c4033] px-5 py-2.5 text-sm font-medium text-[#f5f0e8] transition-colors hover:bg-[#4a3328] dark:bg-[#8b6914] dark:hover:bg-[#7a5c12]"
           >
             Shop all
           </Link>
           <Link
             href="/categories"
-            className="rounded-lg border border-input bg-background px-6 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            className="rounded-lg border border-input bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
           >
             Browse categories
           </Link>
         </div>
       </section>
+
+      <HomeShopBy />
+
       <HomeCategories />
-      <HomeFeaturedProducts />
+
       <HomeNewsletterCta />
     </div>
   );

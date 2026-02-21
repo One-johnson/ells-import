@@ -15,7 +15,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
         pathname: "/**",
-        // Removed 'search' and 'searchParams' as they are invalid here
+      },
+      {
+        protocol: "https",
+        hostname: "flippant-gecko-336.convex.cloud",
+        pathname: "/**",
       },
     ],
   },

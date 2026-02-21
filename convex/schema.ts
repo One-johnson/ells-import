@@ -56,7 +56,11 @@ export const productStatus = v.union(
   v.literal("low_stock"),
   v.literal("pre_order"),
   v.literal("sold_out"),
-  v.literal("archived") // soft delete
+  v.literal("archived"), // soft delete
+  // Legacy statuses (existing data may use these)
+  v.literal("draft"),
+  v.literal("active"),
+  v.literal("out_of_stock")
 );
 
 export const products = defineTable({

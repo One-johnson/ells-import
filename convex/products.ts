@@ -8,7 +8,16 @@ function generateSixDigitId(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-/** Create product (admin only). */
+const STORE_VISIBLE_STATUSES = [
+  "available",
+  "new",
+  "low_stock",
+  "pre_order",
+  "sold_out",
+  "active",
+] as const;
+
+/** Create product (admin only). Notifies all customers with a "New product" notification. */
 export const create = mutation({
   args: {
     sessionToken: v.optional(v.string()),
@@ -33,12 +42,32 @@ export const create = mutation({
       if (!existing) break;
       productId = generateSixDigitId();
     }
-    return await ctx.db.insert("products", {
+    const id = await ctx.db.insert("products", {
       ...data,
       productId,
       createdAt: now,
       updatedAt: now,
     });
+
+    // Notify all customers about the new product
+    const customers = await ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", "customer"))
+      .collect();
+    for (const u of customers) {
+      await ctx.db.insert("notifications", {
+        userId: u._id,
+        type: "promo",
+        title: "New product",
+        body: data.name,
+        read: false,
+        link: "/shop",
+        metadata: { productId: id },
+        createdAt: now,
+      });
+    }
+
+    return id;
   },
 });
 
@@ -62,10 +91,41 @@ export const list = query({
   },
 });
 
+/** List products visible on the store (excludes draft/archived). Optional category filter. */
+export const listForStore = query({
+  args: {
+    limit: v.optional(v.number()),
+    categoryId: v.optional(v.string()),
+  },
+  handler: async (ctx, { limit = 48, categoryId }) => {
+    const all = await ctx.db
+      .query("products")
+      .order("desc")
+      .take(limit * 5);
+    const filtered = all.filter(
+      (p) =>
+        STORE_VISIBLE_STATUSES.includes(p.status as (typeof STORE_VISIBLE_STATUSES)[number]) &&
+        (!categoryId || (p.categoryIds && p.categoryIds.includes(categoryId)))
+    );
+    const items = filtered.slice(0, limit);
+    return { items };
+  },
+});
+
 /** Get product by id. */
 export const get = query({
   args: { productId: v.id("products") },
   handler: async (ctx, { productId }) => ctx.db.get(productId),
+});
+
+/** Get multiple products by ids (e.g. for cart/wishlist). Returns only existing products. */
+export const getByIds = query({
+  args: { productIds: v.array(v.id("products")) },
+  handler: async (ctx, { productIds }) => {
+    const uniq = [...new Set(productIds)];
+    const products = await Promise.all(uniq.map((id) => ctx.db.get(id)));
+    return products.filter((p): p is NonNullable<typeof p> => p != null);
+  },
 });
 
 /** Get product by slug. */
