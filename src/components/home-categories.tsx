@@ -6,18 +6,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Tags, ArrowRight } from "lucide-react";
 
-const PLACEHOLDER_CATEGORIES = [
-  { name: "New arrivals", slug: "new-arrivals", image: null },
-  { name: "Best sellers", slug: "best-sellers", image: null },
-  { name: "Gifts", slug: "gifts", image: null },
-];
-
 export function HomeCategories() {
   const result = useQuery(api.categories.list, { limit: 6 });
-  const categories = result?.items?.length
-    ? result.items
-    : PLACEHOLDER_CATEGORIES;
-  const isEmpty = !result?.items?.length;
+  const categories = result?.items ?? [];
+  const isEmpty = categories.length === 0;
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
@@ -36,20 +28,16 @@ export function HomeCategories() {
         )}
       </div>
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {categories.slice(0, 6).map((cat) => {
-          const slug = "slug" in cat ? cat.slug : cat.slug;
-          const name = "name" in cat ? cat.name : cat.name;
-          const image = "image" in cat ? cat.image : null;
-          return (
+        {categories.slice(0, 6).map((cat) => (
             <Link
-              key={slug}
-              href="/categories"
+              key={cat._id}
+              href={`/shop?category=${cat._id}`}
               className="group relative overflow-hidden rounded-xl border border-border bg-card transition hover:border-[#5c4033]/40 dark:hover:border-[#8b6914]/50"
             >
               <div className="aspect-[4/3] w-full bg-muted/50">
-                {image ? (
+                {cat.image ? (
                   <Image
-                    src={image}
+                    src={cat.image}
                     alt=""
                     fill
                     className="object-cover transition group-hover:scale-105"
@@ -62,12 +50,11 @@ export function HomeCategories() {
               </div>
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4">
                 <span className="font-medium text-white drop-shadow-sm">
-                  {name}
+                  {cat.name}
                 </span>
               </div>
             </Link>
-          );
-        })}
+          ))}
       </div>
       {isEmpty && (
         <p className="mt-4 text-center text-sm text-muted-foreground">

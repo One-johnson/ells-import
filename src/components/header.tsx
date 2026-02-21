@@ -67,10 +67,14 @@ export function Header() {
   const { sessionToken, setSessionToken } = useAuth();
   const user = useQuery(api.users.getMe, sessionToken ? { sessionToken } : "skip");
   const logout = useMutation(api.users.logout);
+  const cart = useQuery(api.carts.get, sessionToken ? { sessionToken } : "skip");
+  const wishlist = useQuery(api.wishlists.get, sessionToken ? { sessionToken } : "skip");
   const notificationsList = useQuery(
     api.notifications.list,
     sessionToken ? { sessionToken, limit: 50 } : "skip"
   );
+  const cartCount = cart?.items?.length ?? 0;
+  const wishlistCount = wishlist?.productIds?.length ?? 0;
   const unreadCount = (notificationsList?.items ?? []).filter((n) => !n.read).length;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsSheetOpen, setNotificationsSheetOpen] = useState(false);
@@ -135,17 +139,26 @@ export function Header() {
                       {label}
                     </Link>
                   ))}
-                  {sheetExtraLinks.map(({ href, label, icon: Icon }) => (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Icon className="size-5 shrink-0" />
-                      {label}
-                    </Link>
-                  ))}
+                  {sheetExtraLinks.map(({ href, label, icon: Icon }) => {
+                    const count =
+                      href === "/cart" ? cartCount : href === "/wishlist" ? wishlistCount : href === "/notifications" && isLoggedIn ? unreadCount : 0;
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 rounded-lg px-4 py-3 text-base font-medium text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Icon className="size-5 shrink-0" />
+                        {label}
+                        {count > 0 && (
+                          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#5c4033] dark:bg-[#8b6914] px-1.5 text-xs font-medium text-white">
+                            {count > 99 ? "99+" : count}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
                   {sheetHelpLinks.map(({ href, label, icon: Icon }) => (
                     <Link
                       key={href}
@@ -201,23 +214,33 @@ export function Header() {
             </div>
           </form>
 
-          {/* Right: cart, wishlist, notifications, theme, user (far right) */}
+          {/* Right: cart, wishlist, notifications (all for any logged-in user including admin), theme, user */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Link
               href="/cart"
-              aria-label="Cart"
-              className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={cartCount > 0 ? `Cart (${cartCount} ${cartCount === 1 ? "product" : "products"})` : "Cart"}
+              className="relative flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <ShoppingCart className="size-5" />
+              {cartCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5c4033] dark:bg-[#8b6914] text-[10px] font-medium text-white px-1">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
             <Link
               href="/wishlist"
-              aria-label="Wishlist"
-              className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={wishlistCount > 0 ? `Wishlist (${wishlistCount} items)` : "Wishlist"}
+              className="relative flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <Heart className="size-5" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5c4033] dark:bg-[#8b6914] text-[10px] font-medium text-white px-1">
+                  {wishlistCount > 99 ? "99+" : wishlistCount}
+                </span>
+              )}
             </Link>
-            {/* Notifications: desktop = Sheet, mobile = Link */}
+            {/* Notifications: desktop = Sheet, mobile = Link; shown for any logged-in user (including admin) */}
             {isLoggedIn ? (
               <>
                 <div className="hidden md:block relative">
