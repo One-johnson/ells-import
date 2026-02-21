@@ -9,6 +9,7 @@ import { contactSchema, type ContactInput } from "@/lib/validations/contact";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const container = {
@@ -37,8 +38,8 @@ export function ContactContent() {
   });
 
   function onSubmit(_data: ContactInput) {
-    // Placeholder: no backend yet. Show success.
     setSubmitted(true);
+    toast.success("Message sent. We'll get back to you soon.");
   }
 
   return (

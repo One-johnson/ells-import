@@ -90,3 +90,34 @@ export const remove = mutation({
     return categoryId;
   },
 });
+
+/** Bulk create categories (admin only). */
+export const bulkCreate = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    categories: v.array(
+      v.object({
+        name: v.string(),
+        slug: v.string(),
+        description: v.optional(v.string()),
+        image: v.optional(v.string()),
+        sortOrder: v.optional(v.number()),
+      })
+    ),
+  },
+  handler: async (ctx, { sessionToken, categories }) => {
+    await requireAdmin(ctx, sessionToken ?? null);
+    const now = Date.now();
+    const ids = [];
+    for (const c of categories) {
+      ids.push(
+        await ctx.db.insert("categories", {
+          ...c,
+          createdAt: now,
+          updatedAt: now,
+        })
+      );
+    }
+    return ids;
+  },
+});

@@ -4,6 +4,10 @@ import type { Id } from "./_generated/dataModel";
 import { requireAdmin } from "./lib/auth";
 import { productStatus } from "./schema";
 
+function generateSixDigitId(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 /** Create product (admin only). */
 export const create = mutation({
   args: {
@@ -23,8 +27,15 @@ export const create = mutation({
     await requireAdmin(ctx, args.sessionToken ?? null);
     const { sessionToken: _, ...data } = args;
     const now = Date.now();
+    let productId = generateSixDigitId();
+    for (let i = 0; i < 20; i++) {
+      const existing = await ctx.db.query("products").withIndex("by_productId", (q) => q.eq("productId", productId)).first();
+      if (!existing) break;
+      productId = generateSixDigitId();
+    }
     return await ctx.db.insert("products", {
       ...data,
+      productId,
       createdAt: now,
       updatedAt: now,
     });
@@ -62,6 +73,27 @@ export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }) =>
     ctx.db.query("products").withIndex("by_slug", (q) => q.eq("slug", slug)).unique(),
+});
+
+/** Generate upload URL for product images (admin only). */
+export const generateUploadUrl = mutation({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx, args.sessionToken ?? null);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Get URL for an uploaded image (by storage ID). */
+export const getImageUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => ctx.storage.getUrl(storageId),
+});
+
+/** Resolve storage ID to URL (for use after upload). */
+export const resolveImageUrl = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => ctx.storage.getUrl(storageId),
 });
 
 /** Update product (admin only). */
@@ -123,10 +155,24 @@ export const bulkCreate = mutation({
     await requireAdmin(ctx, sessionToken ?? null);
     const now = Date.now();
     const ids: Id<"products">[] = [];
+    const usedIds = new Set<string>();
     for (const p of products) {
+      let productId = generateSixDigitId();
+      for (let i = 0; i < 20; i++) {
+        if (usedIds.has(productId)) {
+          productId = generateSixDigitId();
+          continue;
+        }
+        const existing = await ctx.db.query("products").withIndex("by_productId", (q) => q.eq("productId", productId)).first();
+        if (!existing) break;
+        usedIds.add(productId);
+        productId = generateSixDigitId();
+      }
+      usedIds.add(productId);
       ids.push(
         await ctx.db.insert("products", {
           ...p,
+          productId,
           createdAt: now,
           updatedAt: now,
         })
@@ -178,6 +224,23 @@ export const bulkDelete = mutation({
   handler: async (ctx, { sessionToken, productIds }) => {
     await requireAdmin(ctx, sessionToken ?? null);
     for (const id of productIds) await ctx.db.delete(id);
+    return productIds.length;
+  },
+});
+
+/** Bulk update product status (admin only). Use status "archived" for soft delete. */
+export const bulkUpdateStatus = mutation({
+  args: {
+    sessionToken: v.optional(v.string()),
+    productIds: v.array(v.id("products")),
+    status: productStatus,
+  },
+  handler: async (ctx, { sessionToken, productIds, status }) => {
+    await requireAdmin(ctx, sessionToken ?? null);
+    const now = Date.now();
+    for (const id of productIds) {
+      await ctx.db.patch(id, { status, updatedAt: now });
+    }
     return productIds.length;
   },
 });

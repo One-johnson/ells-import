@@ -23,6 +23,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
+import { NotificationsSheet } from "@/components/notifications-sheet";
 import {
   Menu,
   ShoppingCart,
@@ -65,14 +67,19 @@ export function Header() {
   const { sessionToken, setSessionToken } = useAuth();
   const user = useQuery(api.users.getMe, sessionToken ? { sessionToken } : "skip");
   const logout = useMutation(api.users.logout);
+  const notificationsList = useQuery(
+    api.notifications.list,
+    sessionToken ? { sessionToken, limit: 50 } : "skip"
+  );
+  const unreadCount = (notificationsList?.items ?? []).filter((n) => !n.read).length;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsSheetOpen, setNotificationsSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   async function handleSignOut() {
     if (!sessionToken) return;
     await logout({ sessionToken });
     setSessionToken(null);
-    const { toast } = await import("sonner");
     toast.success("Signed out");
     router.push("/");
     router.refresh();
@@ -210,13 +217,50 @@ export function Header() {
             >
               <Heart className="size-5" />
             </Link>
-            <Link
-              href="/notifications"
-              aria-label="Notifications"
-              className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Bell className="size-5" />
-            </Link>
+            {/* Notifications: desktop = Sheet, mobile = Link */}
+            {isLoggedIn ? (
+              <>
+                <div className="hidden md:block relative">
+                  <button
+                    type="button"
+                    onClick={() => setNotificationsSheetOpen(true)}
+                    aria-label="Notifications"
+                    className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground relative"
+                  >
+                    <Bell className="size-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5c4033] dark:bg-[#8b6914] text-[10px] font-medium text-white px-1">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                <Link
+                  href="/notifications"
+                  aria-label="Notifications"
+                  className="relative flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+                >
+                  <Bell className="size-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#5c4033] dark:bg-[#8b6914] text-[10px] font-medium text-white px-1">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )}
+                </Link>
+                <NotificationsSheet
+                  open={notificationsSheetOpen}
+                  onOpenChange={setNotificationsSheetOpen}
+                />
+              </>
+            ) : (
+              <Link
+                href="/notifications"
+                aria-label="Notifications"
+                className="flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <Bell className="size-5" />
+              </Link>
+            )}
             <ThemeToggle />
             {/* User profile menu (far right) */}
             {isLoggedIn ? (
