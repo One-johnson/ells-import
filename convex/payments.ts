@@ -115,6 +115,16 @@ export const remove = mutation({
   },
 });
 
+/** Bulk delete payments (admin only). */
+export const bulkRemove = mutation({
+  args: { sessionToken: v.optional(v.string()), paymentIds: v.array(v.id("payments")) },
+  handler: async (ctx, { sessionToken, paymentIds }) => {
+    await requireAdmin(ctx, sessionToken ?? null);
+    for (const id of paymentIds) await ctx.db.delete(id);
+    return paymentIds.length;
+  },
+});
+
 /** Bulk update payment status (admin only). */
 export const bulkUpdateStatus = mutation({
   args: {

@@ -6,17 +6,43 @@ import { useAuth } from "@/components/providers";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
 import { SkeletonTable } from "@/components/skeletons";
+import Image from "next/image";
 import type { Id } from "convex/_generated/dataModel";
 
 type UserRow = {
   _id: Id<"users">;
   name: string;
   email: string;
+  image?: string;
   role: string;
   createdAt: number;
 };
 
 const columns: ColumnDef<UserRow>[] = [
+  {
+    accessorKey: "image",
+    header: "Photo",
+    cell: ({ row }) => {
+      const u = row.original;
+      if (u.image) {
+        return (
+          <Image
+            src={u.image}
+            alt=""
+            width={36}
+            height={36}
+            className="size-9 rounded-full object-cover"
+          />
+        );
+      }
+      return (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+          {u.name?.charAt(0)?.toUpperCase() ?? "?"}
+        </span>
+      );
+    },
+    enableSorting: false,
+  },
   {
     accessorKey: "name",
     header: "Name",
@@ -69,6 +95,7 @@ export default function AdminCustomersPage() {
             _id: u._id,
             name: u.name,
             email: u.email,
+            image: u.image,
             role: u.role,
             createdAt: u.createdAt,
           }))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useAuth } from "@/components/providers";
@@ -7,11 +8,23 @@ import { formatCurrency } from "@/lib/utils";
 import { SkeletonStatCard, SkeletonTable } from "@/components/skeletons";
 import { type ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
-import { OrdersByStatusChart, OrdersByDayChart } from "@/components/dashboard-charts";
+import { OrdersByStatusChart, OrdersByDayChart, CHART_COLORS } from "@/components/dashboard-charts";
 import type { Id } from "convex/_generated/dataModel";
+import {
+  ShoppingCart,
+  Clock,
+  Banknote,
+  Users,
+  Package,
+  TrendingUp,
+  Award,
+  type LucideIcon,
+} from "lucide-react";
+import Image from "next/image";
 
 type OrderRow = {
   _id: Id<"orders">;
+  orderNumber?: string;
   total: number;
   status: string;
   createdAt: number;
@@ -19,10 +32,12 @@ type OrderRow = {
 
 const orderColumns: ColumnDef<OrderRow>[] = [
   {
-    accessorKey: "_id",
-    header: "Order ID",
+    accessorKey: "orderNumber",
+    header: "Order #",
     cell: ({ row }) => (
-      <span className="font-mono text-xs">{String(row.original._id).slice(-8)}</span>
+      <span className="font-mono text-xs">
+        {row.original.orderNumber ?? String(row.original._id).slice(-8)}
+      </span>
     ),
   },
   {
@@ -47,7 +62,7 @@ export default function AdminDashboardPage() {
   const { sessionToken } = useAuth();
   const orders = useQuery(
     api.orders.list,
-    sessionToken ? { sessionToken, limit: 100 } : "skip"
+    sessionToken ? { sessionToken, limit: 500 } : "skip"
   );
   const users = useQuery(
     api.users.list,
@@ -65,6 +80,10 @@ export default function AdminDashboardPage() {
     .filter((o) => !["cancelled", "refunded"].includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
   const pendingCount = orderItems.filter((o) => o.status === "pending").length;
+  const customerCount = useMemo(
+    () => users?.items?.filter((u) => u.role === "customer").length ?? 0,
+    [users]
+  );
   const statusCounts = orderItems.reduce(
     (acc, o) => {
       acc[o.status] = (acc[o.status] ?? 0) + 1;
@@ -94,6 +113,46 @@ export default function AdminDashboardPage() {
     };
   });
 
+  const mostPurchased = useMemo(() => {
+    const byProduct: Record<string, { name: string; quantity: number }> = {};
+    for (const order of orderItems) {
+      if (["cancelled", "refunded"].includes(order.status)) continue;
+      for (const item of order.items) {
+        const key = item.productId;
+        if (!byProduct[key]) byProduct[key] = { name: item.name, quantity: 0 };
+        byProduct[key].quantity += item.quantity;
+      }
+    }
+    return Object.entries(byProduct)
+      .map(([id, { name, quantity }]) => ({ id, name, quantity }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 8);
+  }, [orderItems]);
+
+  const topBuyers = useMemo(() => {
+    const byUser: Record<string, { orderCount: number; totalSpent: number }> = {};
+    for (const order of orderItems) {
+      if (["cancelled", "refunded"].includes(order.status)) continue;
+      const uid = order.userId;
+      if (!byUser[uid]) byUser[uid] = { orderCount: 0, totalSpent: 0 };
+      byUser[uid].orderCount += 1;
+      byUser[uid].totalSpent += order.total;
+    }
+    const userList = users?.items ?? [];
+    return Object.entries(byUser)
+      .map(([userId, data]) => {
+        const user = userList.find((u) => u._id === userId);
+        return {
+          userId,
+          name: user?.name ?? "Unknown",
+          image: user?.image,
+          ...data,
+        };
+      })
+      .sort((a, b) => b.orderCount - a.orderCount)
+      .slice(0, 8);
+  }, [orderItems, users?.items]);
+
   return (
     <div className="space-y-8">
       <div>
@@ -110,17 +169,20 @@ export default function AdminDashboardPage() {
             <SkeletonStatCard />
             <SkeletonStatCard />
             <SkeletonStatCard />
+            <SkeletonStatCard />
           </>
         ) : (
           <>
-            <StatCard label="Total orders" value={orderItems.length} />
-            <StatCard label="Pending" value={pendingCount} />
+            <StatCard label="Total orders" value={orderItems.length} icon={ShoppingCart} iconColor={CHART_COLORS[0]} />
+            <StatCard label="Pending" value={pendingCount} icon={Clock} iconColor={CHART_COLORS[2]} />
             <StatCard
               label="Revenue"
               value={formatCurrency(totalRevenue / 100)}
+              icon={Banknote}
+              iconColor={CHART_COLORS[1]}
             />
-            <StatCard label="Customers" value={users?.items?.length ?? 0} />
-            <StatCard label="Products" value={productsList?.items?.length ?? 0} />
+            <StatCard label="Customers" value={customerCount} icon={Users} iconColor={CHART_COLORS[4]} />
+            <StatCard label="Products" value={productsList?.items?.length ?? 0} icon={Package} iconColor={CHART_COLORS[3]} />
           </>
         )}
       </div>
@@ -138,6 +200,81 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {!isLoading && (mostPurchased.length > 0 || topBuyers.length > 0) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="font-medium mb-4 flex items-center gap-2">
+              <TrendingUp className="size-5" style={{ color: CHART_COLORS[0] }} />
+              Most purchased items
+            </h3>
+            {mostPurchased.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No data yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {mostPurchased.map((item, i) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 rounded-md py-2 px-2 hover:bg-muted/50"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="flex size-6 shrink-0 items-center justify-center rounded text-xs font-medium text-white"
+                        style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="truncate text-sm">{item.name}</span>
+                    </span>
+                    <span className="text-sm font-medium shrink-0">{item.quantity} sold</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="font-medium mb-4 flex items-center gap-2">
+              <Award className="size-5" style={{ color: CHART_COLORS[1] }} />
+              Top buyers
+            </h3>
+            {topBuyers.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No data yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {topBuyers.map((buyer, i) => (
+                  <li
+                    key={buyer.userId}
+                    className="flex items-center justify-between gap-2 rounded-md py-2 px-2 hover:bg-muted/50"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      {buyer.image ? (
+                        <Image
+                          src={buyer.image}
+                          alt=""
+                          width={28}
+                          height={28}
+                          className="size-7 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <span
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
+                          style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                        >
+                          {buyer.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                      <span className="truncate text-sm">{buyer.name}</span>
+                    </span>
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {buyer.orderCount} orders · {formatCurrency(buyer.totalSpent / 100)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       <div>
         <h2 className="text-lg font-medium mb-4">Recent orders</h2>
         {isLoading ? (
@@ -147,6 +284,7 @@ export default function AdminDashboardPage() {
             columns={orderColumns}
             data={orderItems.slice(0, 10).map((o) => ({
               _id: o._id,
+              orderNumber: o.orderNumber,
               total: o.total,
               status: o.status,
               createdAt: o.createdAt,
@@ -166,14 +304,30 @@ export default function AdminDashboardPage() {
 function StatCard({
   label,
   value,
+  icon: Icon,
+  iconColor,
 }: {
   label: string;
   value: string | number;
+  icon?: LucideIcon;
+  iconColor?: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="mt-1 text-2xl font-semibold">{value}</p>
+        </div>
+        {Icon && (
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg"
+            style={{ backgroundColor: iconColor ? `${iconColor}20` : "hsl(var(--muted))", color: iconColor ?? "hsl(var(--muted-foreground))" }}
+          >
+            <Icon className="size-5" />
+          </span>
+        )}
+      </div>
     </div>
   );
 }

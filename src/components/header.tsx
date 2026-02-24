@@ -22,7 +22,7 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { NotificationsSheet } from "@/components/notifications-sheet";
 import {
@@ -79,6 +79,8 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsSheetOpen, setNotificationsSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   async function handleSignOut() {
     if (!sessionToken) return;
@@ -104,6 +106,7 @@ export function Header() {
         <div className="mx-auto flex h-16 max-w-8xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6">
           {/* Left: hamburger (mobile) + logo + desktop nav */}
           <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-6">
+            {mounted ? (
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
                 <button
@@ -173,6 +176,15 @@ export function Header() {
                 </nav>
               </SheetContent>
             </Sheet>
+            ) : (
+              <button
+                type="button"
+                aria-label="Open menu"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground md:hidden"
+              >
+                <Menu className="size-6" />
+              </button>
+            )}
             <Link href="/" className="flex shrink-0 items-center gap-2">
               <Image
                 src="/logo-source.png"
