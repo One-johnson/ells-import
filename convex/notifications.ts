@@ -27,6 +27,19 @@ export const list = query({
   },
 });
 
+/** Unread count for current user (e.g. for badge). */
+export const unreadCount = query({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireUser(ctx, sessionToken ?? null);
+    const list = await ctx.db
+      .query("notifications")
+      .withIndex("by_user_read_created", (q) => q.eq("userId", user._id).eq("read", false))
+      .collect();
+    return list.length;
+  },
+});
+
 /** Get notification by id. */
 export const get = query({
   args: { sessionToken: v.optional(v.string()), notificationId: v.id("notifications") },
@@ -133,5 +146,19 @@ export const remove = mutation({
     if (n.userId !== user._id && user.role !== "admin") throw new Error("Forbidden");
     await ctx.db.delete(notificationId);
     return notificationId;
+  },
+});
+
+/** Delete all notifications for current user. */
+export const removeAll = mutation({
+  args: { sessionToken: v.optional(v.string()) },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireUser(ctx, sessionToken ?? null);
+    const list = await ctx.db
+      .query("notifications")
+      .withIndex("by_user_created", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const n of list) await ctx.db.delete(n._id);
+    return list.length;
   },
 });

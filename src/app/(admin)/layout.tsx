@@ -47,6 +47,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { SkeletonTable } from "@/components/skeletons";
+import { Badge } from "@/components/ui/badge";
 
 const adminNavItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -73,7 +74,11 @@ function AdminSidebarFooterLink() {
   );
 }
 
-function AdminSidebarNav() {
+function AdminSidebarNav({
+  notificationUnreadCount,
+}: {
+  notificationUnreadCount?: number;
+}) {
   const pathname = usePathname();
   const { setOpenMobile } = useSidebar();
   return (
@@ -90,6 +95,18 @@ function AdminSidebarNav() {
                 <Link href={href} onClick={() => setOpenMobile(false)}>
                   <Icon className="size-4" />
                   <span>{label}</span>
+                  {href === "/admin/notifications" &&
+                    notificationUnreadCount != null &&
+                    notificationUnreadCount > 0 && (
+                      <Badge
+                        variant="default"
+                        className="ml-auto size-5 shrink-0 rounded-full px-1.5 text-[10px] font-semibold"
+                      >
+                        {notificationUnreadCount > 99
+                          ? "99+"
+                          : notificationUnreadCount}
+                      </Badge>
+                    )}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -109,6 +126,10 @@ export default function AdminLayout({
   const pathname = usePathname();
   const { sessionToken, setSessionToken, isLoading: authLoading } = useAuth();
   const user = useQuery(api.users.getMe, sessionToken ? { sessionToken } : "skip");
+  const notificationUnreadCount = useQuery(
+    api.notifications.unreadCount,
+    sessionToken ? { sessionToken } : "skip"
+  );
   const logout = useMutation(api.users.logout);
 
   async function handleSignOut() {
@@ -164,7 +185,7 @@ export default function AdminLayout({
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          <AdminSidebarNav />
+          <AdminSidebarNav notificationUnreadCount={notificationUnreadCount} />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border">
           <SidebarMenu>
@@ -177,7 +198,7 @@ export default function AdminLayout({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
+        <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <span className="text-sm text-muted-foreground">Admin</span>
@@ -234,6 +255,11 @@ export default function AdminLayout({
                 <DropdownMenuItem asChild>
                   <Link href="/admin" className="flex items-center gap-2">
                     <LayoutDashboard className="size-4" /> Admin dashboard
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/settings" className="flex items-center gap-2">
+                    <Settings className="size-4" /> Settings
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

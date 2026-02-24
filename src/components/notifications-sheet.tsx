@@ -126,7 +126,7 @@ function NotificationItem({
         </p>
       )}
       <p className="mt-1 text-xs text-muted-foreground">
-        {new Date(createdAt).toLocaleDateString("en-US", {
+        {new Date(createdAt).toLocaleString("en-US", {
           dateStyle: "short",
           timeStyle: "short",
         })}

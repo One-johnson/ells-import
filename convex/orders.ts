@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser, requireAdmin } from "./lib/auth";
-import { orderStatus, orderItem } from "./schema";
+import { orderStatus, orderItem, orderType } from "./schema";
 
 const shippingAddressValidator = v.optional(
   v.object({
@@ -11,8 +11,15 @@ const shippingAddressValidator = v.optional(
     state: v.optional(v.string()),
     postalCode: v.string(),
     country: v.string(),
+    phone: v.optional(v.string()),
+    whatsappNumber: v.optional(v.string()),
+    email: v.optional(v.string()),
   })
 );
+
+function generateOrderNumber(): string {
+  return String(Math.floor(10000000 + Math.random() * 90000000));
+}
 
 /** Create order from cart items (customer). */
 export const create = mutation({
@@ -23,13 +30,25 @@ export const create = mutation({
     shipping: v.optional(v.number()),
     tax: v.optional(v.number()),
     total: v.number(),
+    orderType: v.optional(orderType),
     shippingAddress: shippingAddressValidator,
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx, args.sessionToken ?? null);
     const now = Date.now();
+    let orderNumber = generateOrderNumber();
+    for (let i = 0; i < 20; i++) {
+      const existing = await ctx.db
+        .query("orders")
+        .withIndex("by_orderNumber", (q) => q.eq("orderNumber", orderNumber))
+        .first();
+      if (!existing) break;
+      orderNumber = generateOrderNumber();
+    }
     return await ctx.db.insert("orders", {
       userId: user._id,
+      orderNumber,
+      orderType: args.orderType,
       items: args.items,
       subtotal: args.subtotal,
       shipping: args.shipping,
@@ -65,6 +84,19 @@ export const list = query({
     let items = Array.isArray(result) ? result : result.page;
     if (user.role !== "admin" && status) items = items.filter((o) => o.status === status);
     const nextCursor = Array.isArray(result) ? null : result.continueCursor;
+
+    if (user.role === "admin" && items.length > 0) {
+      const enriched: (typeof items[0] & { customer: { name: string; image?: string } | null })[] = [];
+      for (const o of items) {
+        const customerDoc = await ctx.db.get(o.userId);
+        const customer = customerDoc
+          ? { name: customerDoc.name, image: customerDoc.image }
+          : null;
+        enriched.push({ ...o, customer });
+      }
+      return { items: enriched, nextCursor };
+    }
+
     return { items, nextCursor };
   },
 });
@@ -81,12 +113,13 @@ export const get = query({
   },
 });
 
-/** Update order (admin: status, etc.). */
+/** Update order (admin: status, orderType, etc.). */
 export const update = mutation({
   args: {
     sessionToken: v.optional(v.string()),
     orderId: v.id("orders"),
     status: v.optional(orderStatus),
+    orderType: v.optional(orderType),
     paymentId: v.optional(v.id("payments")),
     shippingAddress: shippingAddressValidator,
   },
@@ -100,13 +133,35 @@ export const update = mutation({
   },
 });
 
-/** Delete order (admin only). */
+/** Delete order (admin only). Also deletes linked payment(s). */
 export const remove = mutation({
   args: { sessionToken: v.optional(v.string()), orderId: v.id("orders") },
   handler: async (ctx, { sessionToken, orderId }) => {
     await requireAdmin(ctx, sessionToken ?? null);
+    const payments = await ctx.db
+      .query("payments")
+      .withIndex("by_order", (q) => q.eq("orderId", orderId))
+      .collect();
+    for (const p of payments) await ctx.db.delete(p._id);
     await ctx.db.delete(orderId);
     return orderId;
+  },
+});
+
+/** Bulk delete orders (admin only). */
+export const bulkRemove = mutation({
+  args: { sessionToken: v.optional(v.string()), orderIds: v.array(v.id("orders")) },
+  handler: async (ctx, { sessionToken, orderIds }) => {
+    await requireAdmin(ctx, sessionToken ?? null);
+    for (const orderId of orderIds) {
+      const payments = await ctx.db
+        .query("payments")
+        .withIndex("by_order", (q) => q.eq("orderId", orderId))
+        .collect();
+      for (const p of payments) await ctx.db.delete(p._id);
+      await ctx.db.delete(orderId);
+    }
+    return orderIds.length;
   },
 });
 

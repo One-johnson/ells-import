@@ -124,8 +124,12 @@ export const orderItem = v.object({
   name: v.string(),
 });
 
+export const orderType = v.union(v.literal("delivery"), v.literal("pickup"));
+
 export const orders = defineTable({
   userId: v.id("users"),
+  orderNumber: v.optional(v.string()), // 8-digit display id for easy reference (e.g. 12345678)
+  orderType: v.optional(orderType), // delivery or pickup
   items: v.array(orderItem),
   subtotal: v.number(),
   shipping: v.optional(v.number()),
@@ -141,6 +145,9 @@ export const orders = defineTable({
       state: v.optional(v.string()),
       postalCode: v.string(),
       country: v.string(),
+      phone: v.optional(v.string()),
+      whatsappNumber: v.optional(v.string()),
+      email: v.optional(v.string()),
     })
   ),
   createdAt: v.number(),
@@ -150,7 +157,8 @@ export const orders = defineTable({
   .index("by_user_created", ["userId", "createdAt"])
   .index("by_status", ["status"])
   .index("by_status_created", ["status", "createdAt"])
-  .index("by_payment", ["paymentId"]);
+  .index("by_payment", ["paymentId"])
+  .index("by_orderNumber", ["orderNumber"]);
 
 // ─── Payments (WhatsApp-based) ────────────────────────────────────────────
 export const paymentStatus = v.union(
@@ -223,6 +231,21 @@ export const notifications = defineTable({
   .index("by_user_read_created", ["userId", "read", "createdAt"])
   .index("by_user_created", ["userId", "createdAt"]);
 
+// ─── Settings (single-doc store config) ─────────────────────────────────────
+export const settings = defineTable({
+  storeName: v.optional(v.string()),
+  paymentPhone: v.optional(v.string()),
+  paymentName: v.optional(v.string()),
+  adminWhatsApp: v.optional(v.string()),
+  defaultCountry: v.optional(v.string()),
+  currency: v.optional(v.string()),
+  freeShippingThresholdPesewas: v.optional(v.number()),
+  shippingFlatRatePesewas: v.optional(v.number()),
+  taxRatePercent: v.optional(v.number()),
+  maintenanceMode: v.optional(v.boolean()),
+  updatedAt: v.number(),
+});
+
 // ─── Schema export ────────────────────────────────────────────────────────
 export default defineSchema({
   users,
@@ -235,4 +258,5 @@ export default defineSchema({
   payments,
   reviews,
   notifications,
+  settings,
 });

@@ -134,7 +134,7 @@ function NotificationContent({
       )}
       <p className="mt-1 text-xs text-muted-foreground capitalize">
         {n.type} ·{" "}
-        {new Date(n.createdAt).toLocaleDateString("en-US", {
+        {new Date(n.createdAt).toLocaleString("en-US", {
           dateStyle: "medium",
           timeStyle: "short",
         })}
