@@ -311,3 +311,63 @@ export const bulkSetLines = mutation({
     await ctx.db.patch(cart._id, { updatedAt: now });
   },
 });
+
+export const mergeGuestLines = mutation({
+  args: {
+    sessionToken: v.string(),
+    lines: v.array(
+      v.object({
+        productId: v.id("products"),
+        quantity: v.number(),
+      }),
+    ),
+  },
+  handler: async (ctx, { sessionToken, lines }) => {
+    const { userId } = await requireAuthed(ctx, sessionToken);
+    const now = Date.now();
+    let cart = await ctx.db
+      .query("carts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (!cart) {
+      const cartId = await ctx.db.insert("carts", { userId, updatedAt: now });
+      cart = (await ctx.db.get(cartId))!;
+    } else {
+      await ctx.db.patch(cart._id, { updatedAt: now });
+    }
+
+    const sliced = lines.slice(0, 200);
+    for (const { productId, quantity } of sliced) {
+      const q = Math.floor(quantity);
+      if (q < 1) {
+        continue;
+      }
+      const p = await ctx.db.get(productId);
+      if (!p || p.status !== "active") {
+        continue;
+      }
+      const existing = await ctx.db
+        .query("cartItems")
+        .withIndex("by_cart_product", (q) =>
+          q.eq("cartId", cart!._id).eq("productId", productId),
+        )
+        .unique();
+      const nextQty = (existing?.quantity ?? 0) + q;
+      if (p.stock < nextQty) {
+        // Cap to available stock instead of failing the entire merge.
+        if (existing) {
+          await ctx.db.patch(existing._id, { quantity: p.stock });
+        } else if (p.stock > 0) {
+          await ctx.db.insert("cartItems", { cartId: cart!._id, productId, quantity: p.stock });
+        }
+        continue;
+      }
+      if (existing) {
+        await ctx.db.patch(existing._id, { quantity: nextQty });
+      } else {
+        await ctx.db.insert("cartItems", { cartId: cart!._id, productId, quantity: q });
+      }
+    }
+    return { cartId: cart._id };
+  },
+});

@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SiteHeaderClient } from "@/components/site-header-client";
 import { SiteFooter } from "@/components/site-footer";
 import { StorefrontMain } from "@/components/storefront-main";
 import { AuthProvider } from "@/providers/auth-provider";
+import { GuestCartProvider } from "@/providers/guest-cart-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ConvexClientProvider } from "./ConvexClientProvider";
@@ -65,12 +67,15 @@ export default function RootLayout({
         >
           <ConvexClientProvider>
             <AuthProvider>
-              <div className="flex min-h-full min-h-[100dvh] flex-1 flex-col">
-                <SiteHeaderClient />
-                <StorefrontMain>{children}</StorefrontMain>
-                <SiteFooter />
-                <Toaster position="top-center" richColors closeButton />
-              </div>
+              <GuestCartProvider>
+                <div className="flex min-h-full min-h-[100dvh] flex-1 flex-col">
+                  <SiteHeaderClient />
+                  <StorefrontMain>{children}</StorefrontMain>
+                  <SiteFooter />
+                  <MobileBottomNav />
+                  <Toaster position="top-center" richColors closeButton />
+                </div>
+              </GuestCartProvider>
             </AuthProvider>
           </ConvexClientProvider>
         </ThemeProvider>

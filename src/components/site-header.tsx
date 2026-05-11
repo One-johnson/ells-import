@@ -23,26 +23,27 @@ function SearchFieldFallback() {
   );
 }
 
-const DEFAULT_STORE_NAME = "Ells Import";
 const ANNOUNCEMENT_DISMISS_KEY = "ells-import:announcement-dismiss";
 
 export function SiteHeader() {
   const { isLoading, isAuthenticated, isAdmin, user, sessionToken } = useAuth();
   const storefront = useQuery(api.settings.storefrontSettings);
-  const brand = storefront?.storeName?.trim() || DEFAULT_STORE_NAME;
+  const brand = storefront?.storeName?.trim() ?? "";
   const announcement = storefront?.announcementText?.trim() ?? "";
   const [showAnnouncement, setShowAnnouncement] = useState(false);
 
   useEffect(() => {
     if (!announcement) {
-      setShowAnnouncement(false);
+      queueMicrotask(() => setShowAnnouncement(false));
       return;
     }
     if (typeof window === "undefined") {
       return;
     }
-    const dismissed = localStorage.getItem(ANNOUNCEMENT_DISMISS_KEY);
-    setShowAnnouncement(dismissed !== announcement);
+    queueMicrotask(() => {
+      const dismissed = localStorage.getItem(ANNOUNCEMENT_DISMISS_KEY);
+      setShowAnnouncement(dismissed !== announcement);
+    });
   }, [announcement]);
 
   return (
@@ -65,44 +66,88 @@ export function SiteHeader() {
           </Button>
         </div>
       )}
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 sm:min-h-14 sm:gap-3 sm:px-4 sm:py-0">
-        <div className="order-1 flex min-w-0 shrink-0 items-center gap-2 sm:order-1 sm:gap-3">
-          <Link href="/" className="text-foreground text-sm font-semibold tracking-tight">
-            {brand}
-          </Link>
+      <div className="mx-auto w-full max-w-6xl px-3 py-2 sm:px-4 sm:py-0">
+        {/* Mobile top bar: notifications far-left, brand centered, avatar stays right */}
+        <div className="relative flex items-center justify-between gap-2 md:hidden">
+          <div className="flex shrink-0 items-center">
+            {isLoading ? (
+              <span className="text-muted-foreground px-2 text-xs">…</span>
+            ) : isAuthenticated && user && sessionToken ? (
+              <HeaderNotifications sessionToken={sessionToken} />
+            ) : (
+              <span className="w-9" aria-hidden />
+            )}
+          </div>
+
           <Link
-            href="/shop"
-            className="text-muted-foreground hover:text-foreground text-xs font-medium transition sm:text-sm"
+            href="/"
+            aria-label="Home"
+            className="text-foreground absolute left-1/2 -translate-x-1/2 text-sm font-semibold tracking-tight"
           >
-            Shop
+            {brand ? brand : storefront === undefined ? "…" : <span className="sr-only">Home</span>}
           </Link>
+
+          <nav className="flex shrink-0 items-center gap-1">
+            <HeaderCart />
+            {isLoading ? null : isAuthenticated && user && sessionToken ? (
+              <HeaderUserMenu user={user} isAdmin={isAdmin} />
+            ) : (
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/login">Sign in</Link>
+              </Button>
+            )}
+          </nav>
         </div>
-        <div className="order-3 w-full min-w-0 sm:order-2 sm:w-auto sm:max-w-md sm:flex-1 lg:max-w-lg">
+
+        {/* Desktop / tablet header */}
+        <div className="hidden w-full items-center gap-x-2 gap-y-2 md:flex md:flex-wrap md:py-0 md:min-h-14 md:gap-3">
+          <div className="flex min-w-0 shrink-0 items-center gap-3">
+            <Link href="/" className="text-foreground text-sm font-semibold tracking-tight" aria-label="Home">
+              {brand || <span className="sr-only">Home</span>}
+            </Link>
+            <Link
+              href="/shop"
+              className="text-muted-foreground hover:text-foreground hidden text-xs font-medium transition md:inline md:text-sm"
+            >
+              Shop
+            </Link>
+          </div>
+
+          <div className="min-w-0 flex-1 sm:max-w-md lg:max-w-lg">
+            <Suspense fallback={<SearchFieldFallback />}>
+              <GlobalSearch />
+            </Suspense>
+          </div>
+
+          <nav className="ml-auto flex shrink-0 items-center gap-2">
+            <HeaderCart />
+            {isLoading ? (
+              <span className="text-muted-foreground px-2 text-xs">…</span>
+            ) : isAuthenticated && user && sessionToken ? (
+              <>
+                <HeaderWishlist />
+                <HeaderNotifications sessionToken={sessionToken} />
+                <HeaderUserMenu user={user} isAdmin={isAdmin} />
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/register">Register</Link>
+                </Button>
+              </>
+            )}
+          </nav>
+        </div>
+
+        {/* Mobile search row */}
+        <div className="mt-2 w-full md:hidden">
           <Suspense fallback={<SearchFieldFallback />}>
             <GlobalSearch />
           </Suspense>
         </div>
-        <nav className="order-2 ml-auto flex shrink-0 items-center gap-1 sm:order-3 sm:gap-2">
-          <HeaderCart />
-          {isLoading ? (
-            <span className="text-muted-foreground px-2 text-xs">…</span>
-          ) : isAuthenticated && user && sessionToken ? (
-            <>
-              <HeaderWishlist />
-              <HeaderNotifications sessionToken={sessionToken} />
-              <HeaderUserMenu user={user} isAdmin={isAdmin} />
-            </>
-          ) : (
-            <>
-              <Button size="sm" variant="ghost" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button size="sm" asChild>
-                <Link href="/register">Register</Link>
-              </Button>
-            </>
-          )}
-        </nav>
       </div>
     </header>
   );

@@ -6,11 +6,13 @@ import { useQuery } from "convex/react";
 
 import { api } from "@convex/_generated/api";
 import { ProductCard } from "@/components/storefront/product-card";
+import { CategoryCarousel } from "@/components/storefront/category-carousel";
 import { ShopGridSkeleton } from "@/components/storefront/shop-grid-skeleton";
 import { cn } from "@/lib/utils";
 
 const FEATURED_COUNT = 8;
 const CATEGORY_CHIPS = 8;
+const DISCOVERY_COUNT = 8;
 
 function SectionLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
@@ -25,13 +27,19 @@ function SectionLink({ href, children, className }: { href: string; children: Re
 
 export function HomeCatalog() {
   const products = useQuery(api.products.listActive, { limit: FEATURED_COUNT });
-  const rootCategories = useQuery(api.categories.list, {});
+  const bestSellers = useQuery(api.products.listBestSellers, { limit: DISCOVERY_COUNT });
+  const trending = useQuery(api.products.listTrending, { limit: DISCOVERY_COUNT });
+  const rootCategories = useQuery(api.categories.listWithThumbnails, { limit: 32 });
 
-  if (products === undefined || rootCategories === undefined) {
+  if (
+    products === undefined ||
+    rootCategories === undefined ||
+    bestSellers === undefined ||
+    trending === undefined
+  ) {
     return <ShopGridSkeleton />;
   }
 
-  const categoryPreview = rootCategories.slice(0, CATEGORY_CHIPS);
   const hasMoreCategories = rootCategories.length > CATEGORY_CHIPS;
 
   return (
@@ -44,27 +52,60 @@ export function HomeCatalog() {
             </h2>
             <SectionLink href="/shop">View all</SectionLink>
           </div>
-          <ul className="flex flex-wrap gap-2" role="list">
-            {categoryPreview.map((c) => (
-              <li key={c._id}>
-                <Link
-                  href={`/categories/${encodeURIComponent(c.slug)}`}
-                  className="bg-muted/60 text-foreground hover:bg-muted inline-flex rounded-full px-3 py-1.5 text-xs font-medium transition"
-                >
-                  {c.name}
-                </Link>
-              </li>
-            ))}
+          <div className="space-y-3">
+            <CategoryCarousel categories={rootCategories} />
             {hasMoreCategories ? (
-              <li>
+              <div className="flex justify-end">
                 <Link
                   href="/shop"
                   className="text-muted-foreground hover:text-foreground inline-flex rounded-full border border-dashed px-3 py-1.5 text-xs font-medium transition"
                 >
                   +{rootCategories.length - CATEGORY_CHIPS} more
                 </Link>
-              </li>
+              </div>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {bestSellers.length > 0 ? (
+        <section aria-labelledby="home-best-sellers-heading" className="space-y-3" id="best-sellers">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 id="home-best-sellers-heading" className="text-foreground text-lg font-semibold tracking-tight">
+                Best sellers
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">Most purchased lately.</p>
+            </div>
+            <SectionLink href="/shop">Shop all</SectionLink>
+          </div>
+          <ul className="mt-2 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+            {bestSellers.map((p) => (
+              <li key={p._id} className="min-w-0">
+                <ProductCard product={p} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {trending.length > 0 ? (
+        <section aria-labelledby="home-trending-heading" className="space-y-3" id="trending">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 id="home-trending-heading" className="text-foreground text-lg font-semibold tracking-tight">
+                Trending now
+              </h2>
+              <p className="text-muted-foreground mt-1 text-sm">Popular this week.</p>
+            </div>
+            <SectionLink href="/shop">Browse</SectionLink>
+          </div>
+          <ul className="mt-2 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+            {trending.map((p) => (
+              <li key={p._id} className="min-w-0">
+                <ProductCard product={p} />
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}
@@ -84,7 +125,7 @@ export function HomeCatalog() {
             admin, they will appear here.
           </p>
         ) : (
-          <ul className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
+          <ul className="mt-2 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" role="list">
             {products.map((p) => (
               <li key={p._id} className="min-w-0">
                 <ProductCard product={p} />

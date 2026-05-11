@@ -35,3 +35,27 @@ export const backfillPublicCodes = mutation({
     return { patched };
   },
 });
+
+/**
+ * One-time (or idempotent) backfill of `inStock` for products.
+ * Safe to run multiple times; only patches rows where `inStock` is undefined.
+ */
+export const backfillProductInStock = mutation({
+  args: { sessionToken: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { sessionToken, limit = 2000 }) => {
+    await requireAdmin(ctx, sessionToken);
+    let patched = 0;
+    const cap = Math.min(Math.max(1, limit), 10000);
+    for await (const p of ctx.db.query("products")) {
+      if (patched >= cap) {
+        break;
+      }
+      if (p.inStock !== undefined) {
+        continue;
+      }
+      await ctx.db.patch(p._id, { inStock: p.stock > 0 });
+      patched += 1;
+    }
+    return { patched };
+  },
+});

@@ -5,12 +5,15 @@ import { Heart } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ConvexImage } from "@/components/convex-image";
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { useAuth } from "@/providers/auth-provider";
 import { formatPrice } from "@/lib/formatPrice";
+import { addGuestCartItem } from "@/lib/guestCart";
 import { descriptionToSpecLines } from "@/lib/product-specs";
 import { publicRef } from "@/lib/public-ref";
 import { cn } from "@/lib/utils";
@@ -65,13 +68,18 @@ export function ProductDetailContent() {
   const maxQty = product ? Math.max(0, product.stock) : 0;
 
   const onAddToCart = useCallback(async () => {
-    if (!sessionToken || !product) {
+    if (!product) {
       return;
     }
     if (maxQty < 1) {
       return;
     }
     const q = Math.min(qty, maxQty);
+    if (!sessionToken || !isAuthenticated) {
+      addGuestCartItem(product._id as string, q);
+      toast.success("Added to cart", { description: product.name });
+      return;
+    }
     setAdding(true);
     try {
       await addItem({ sessionToken, productId: product._id, quantity: q });
@@ -81,7 +89,7 @@ export function ProductDetailContent() {
     } finally {
       setAdding(false);
     }
-  }, [addItem, sessionToken, product, maxQty, qty]);
+  }, [addItem, sessionToken, product, maxQty, qty, isAuthenticated]);
 
   const onToggleWishlist = useCallback(async () => {
     if (!sessionToken || !product) {
@@ -136,11 +144,7 @@ export function ProductDetailContent() {
         <div className="space-y-3">
           <div className="bg-muted/30 border-border aspect-square w-full overflow-hidden rounded-lg border">
             {mainUrl ? (
-              <img
-                src={mainUrl}
-                alt=""
-                className="h-full w-full object-contain"
-              />
+              <ConvexImage src={mainUrl} alt={product.name} width={800} height={800} className="h-full w-full object-contain" />
             ) : (
               <div className="text-muted-foreground flex h-full items-center justify-center text-sm">No image</div>
             )}
@@ -156,7 +160,7 @@ export function ProductDetailContent() {
                     i === imageIdx ? "border-foreground" : "border-transparent"
                   }`}
                 >
-                  <img src={url} alt="" className="h-full w-full object-cover" />
+                  <ConvexImage src={url} alt="" width={64} height={64} className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -210,23 +214,14 @@ export function ProductDetailContent() {
             <div className="flex flex-wrap items-end gap-3">
               {maxQty > 0 ? (
                 <>
-                  <div>
-                    <label htmlFor="qty" className="text-muted-foreground text-xs">
-                      Quantity
-                    </label>
-                    <input
-                      id="qty"
-                      type="number"
+                  <div className="space-y-1">
+                    <label className="text-muted-foreground text-xs">Quantity</label>
+                    <QuantityStepper
+                      value={Math.min(qty, maxQty)}
                       min={1}
                       max={maxQty}
-                      value={Math.min(qty, maxQty)}
-                      onChange={(e) => {
-                        const n = parseInt(e.target.value, 10);
-                        if (!Number.isNaN(n)) {
-                          setQty(Math.min(maxQty, Math.max(1, n)));
-                        }
-                      }}
-                      className="border-input bg-background text-foreground mt-1 w-20 rounded-md border px-2 py-1.5 text-sm"
+                      disabled={adding}
+                      onChange={(n) => setQty(Math.min(maxQty, Math.max(1, n)))}
                     />
                   </div>
                   <Button onClick={() => void onAddToCart()} disabled={adding}>
@@ -268,6 +263,17 @@ export function ProductDetailContent() {
                   </Link>
                 </Button>
               </div>
+              {maxQty > 0 ? (
+                <div className="pt-1">
+                  <QuantityStepper
+                    value={Math.min(qty, maxQty)}
+                    min={1}
+                    max={maxQty}
+                    disabled={adding}
+                    onChange={(n) => setQty(Math.min(maxQty, Math.max(1, n)))}
+                  />
+                </div>
+              ) : null}
             </div>
           )}
         </div>

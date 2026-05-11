@@ -4,14 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { Heart, PackageX, ShoppingCart, Trash2 } from "lucide-react";
 
+import { ConvexImage } from "@/components/convex-image";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { AccountPageSkeleton } from "@/components/account/account-page-skeleton";
 import { formatPrice } from "@/lib/formatPrice";
 import { publicRef } from "@/lib/public-ref";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
-import { AccountPageSkeleton } from "@/components/account/account-page-skeleton";
 import { toast } from "sonner";
 
 export function WishlistContent() {
@@ -77,87 +82,163 @@ export function WishlistContent() {
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-4">
-        <p className="text-muted-foreground text-sm">Your wishlist is empty.</p>
-        <Button asChild>
-          <Link href="/shop">Browse the shop</Link>
-        </Button>
-      </div>
+      <Card className="border-dashed shadow-none">
+        <CardContent className="flex flex-col items-center px-4 py-12 text-center sm:px-6 sm:py-14">
+          <div className="bg-muted/80 mb-5 flex size-16 items-center justify-center rounded-full">
+            <Heart className="text-muted-foreground size-8 stroke-[1.25]" aria-hidden />
+          </div>
+          <h2 className="text-foreground text-lg font-semibold tracking-tight">Nothing saved yet</h2>
+          <p className="text-muted-foreground mt-2 max-w-sm text-sm leading-relaxed">
+            Tap the heart on a product to save it here. Come back anytime to add favorites to your cart.
+          </p>
+          <Button className="mt-8" asChild>
+            <Link href="/shop">Browse the shop</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <ul className="divide-y rounded-lg border" role="list">
-      {rows.map((row) => {
-        const p = row.product;
-        if (!p || p.status !== "active") {
+    <div className="space-y-3 sm:space-y-4">
+      <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
+        {rows.length} saved {rows.length === 1 ? "item" : "items"}
+      </p>
+      <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-5" role="list">
+        {rows.map((row) => {
+          const p = row.product;
+          if (!p || p.status !== "active") {
+            return (
+              <li key={row._id} className="lg:col-span-2">
+                <Card
+                  className={cn(
+                    "border-dashed bg-muted/30 shadow-none transition-colors",
+                    "hover:bg-muted/40",
+                  )}
+                >
+                  <CardContent className="flex flex-wrap items-center gap-3 p-3 sm:gap-4 sm:p-4 sm:flex-nowrap sm:justify-between">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="bg-muted/80 flex size-11 shrink-0 items-center justify-center rounded-lg border">
+                        <PackageX className="text-muted-foreground size-5" aria-hidden />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-foreground text-sm font-medium">No longer available</p>
+                        <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                          This product was removed from the catalog. Remove it from your list to tidy up.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={!sessionToken || busyId === row.productId}
+                      onClick={() => void onRemove(row.productId)}
+                    >
+                      Remove
+                    </Button>
+                  </CardContent>
+                </Card>
+              </li>
+            );
+          }
+          const thumb = row.thumbnailUrl;
+          const busy = busyId === row.productId;
+          const out = p.stock < 1;
+          const href = `/products/${encodeURIComponent(p.slug)}`;
+
           return (
-            <li key={row._id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-              <p className="text-muted-foreground text-sm">Product no longer available · removed from catalog</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!sessionToken || busyId === row.productId}
-                onClick={() => void onRemove(row.productId)}
+            <li key={row._id} className="flex min-h-0">
+              <Card
+                className={cn(
+                  "flex h-full min-h-0 w-full flex-col overflow-hidden shadow-sm transition-[border-color,box-shadow]",
+                  "hover:border-foreground/15 hover:shadow-md",
+                )}
               >
-                Remove
-              </Button>
+                <CardContent className="flex flex-1 flex-col p-3 sm:p-5">
+                  <div className="flex flex-1 flex-col gap-3 sm:gap-4 sm:flex-row sm:items-stretch sm:gap-5 lg:flex-col lg:gap-4">
+                    <Link
+                      href={href}
+                      className={cn(
+                        "bg-muted/30 border-border group/img relative shrink-0 overflow-hidden rounded-xl border",
+                        "aspect-square w-full max-w-[6.25rem] sm:max-w-[8.5rem]",
+                        "lg:max-w-none lg:aspect-[4/3] lg:w-full",
+                      )}
+                      aria-label={`View ${p.name}`}
+                    >
+                      {thumb ? (
+                        <ConvexImage
+                          src={thumb}
+                          alt=""
+                          fill
+                          className="object-cover transition duration-300 group-hover/img:scale-[1.03]"
+                          sizes="(min-width: 1024px) 42vw, (min-width: 640px) 136px, 100px"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground flex h-full items-center justify-center text-xs">
+                          No image
+                        </span>
+                      )}
+                    </Link>
+
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-between gap-3 sm:gap-4 lg:min-h-0">
+                      <div className="min-w-0 space-y-1.5 sm:space-y-2">
+                        <div className="flex flex-wrap items-start gap-2 gap-y-1">
+                          <Link
+                            href={href}
+                            className="text-foreground line-clamp-2 text-sm leading-snug font-medium hover:underline sm:text-base"
+                          >
+                            {p.name}
+                          </Link>
+                          {out ? (
+                            <Badge variant="muted" className="shrink-0 font-normal">
+                              Out of stock
+                            </Badge>
+                          ) : null}
+                        </div>
+                        {p.publicCode ? (
+                          <p className="text-muted-foreground font-mono text-xs tabular-nums">
+                            Ref {publicRef(p.publicCode)}
+                          </p>
+                        ) : null}
+                        <p className="text-foreground text-base font-semibold tabular-nums sm:text-lg">
+                          {formatPrice(p.priceCents, p.currency)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:flex-col lg:items-stretch">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="w-full gap-1.5 sm:w-auto lg:w-full"
+                          disabled={out || !sessionToken || busy}
+                          onClick={() => void onAddToCart(p._id, p.name, p.stock)}
+                        >
+                          <ShoppingCart className="size-4" aria-hidden />
+                          Add to cart
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-muted-foreground w-full gap-1.5 border-dashed sm:w-auto lg:w-full"
+                          disabled={!sessionToken || busy}
+                          onClick={() => void onRemove(row.productId)}
+                          aria-label={`Remove ${p.name} from wishlist`}
+                        >
+                          <Trash2 className="size-4" aria-hidden />
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </li>
           );
-        }
-        const thumb = row.thumbnailUrl;
-        const busy = busyId === row.productId;
-        const out = p.stock < 1;
-        return (
-          <li key={row._id} className="flex flex-wrap gap-4 px-4 py-4 sm:flex-nowrap">
-            <Link
-              href={`/products/${encodeURIComponent(p.slug)}`}
-              className="bg-muted/30 border-border relative h-24 w-24 shrink-0 overflow-hidden rounded-md border"
-            >
-              {thumb ? (
-                <img src={thumb} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-muted-foreground flex h-full items-center justify-center text-xs">No image</span>
-              )}
-            </Link>
-            <div className="min-w-0 flex-1">
-              <Link
-                href={`/products/${encodeURIComponent(p.slug)}`}
-                className="text-foreground font-medium hover:underline"
-              >
-                {p.name}
-              </Link>
-              {p.publicCode ? (
-                <p className="text-muted-foreground font-mono text-xs tabular-nums">Ref {publicRef(p.publicCode)}</p>
-              ) : null}
-              <p className="text-foreground mt-1 text-sm font-semibold tabular-nums">
-                {formatPrice(p.priceCents, p.currency)}
-              </p>
-              {out ? <p className="text-muted-foreground mt-1 text-xs">Out of stock</p> : null}
-            </div>
-            <div className="flex w-full shrink-0 flex-wrap gap-2 sm:w-auto sm:flex-col">
-              <Button
-                type="button"
-                size="sm"
-                disabled={out || !sessionToken || busy}
-                onClick={() => void onAddToCart(p._id, p.name, p.stock)}
-              >
-                Add to cart
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={!sessionToken || busy}
-                onClick={() => void onRemove(row.productId)}
-              >
-                Remove
-              </Button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+        })}
+      </ul>
+    </div>
   );
 }

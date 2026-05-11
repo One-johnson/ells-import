@@ -6,7 +6,7 @@ export function ShopGridSkeleton() {
           <div key={k} className="bg-muted h-7 w-24 animate-pulse rounded-full" />
         ))}
       </div>
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" role="list" aria-hidden>
+      <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3" role="list" aria-hidden>
         {["a", "b", "c", "d", "e", "f"].map((k) => (
           <li key={k} className="min-w-0">
             <div className="border-border overflow-hidden rounded-lg border">

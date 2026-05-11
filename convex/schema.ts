@@ -123,6 +123,10 @@ export default defineSchema({
     imageIds: v.optional(v.array(v.id("_storage"))),
     status: productStatus,
     stock: v.number(),
+    /** Baseline stock for progress bar (reset on restock). */
+    initialStock: v.optional(v.number()),
+    /** Denormalized helper for fast storefront filtering. */
+    inStock: v.optional(v.boolean()),
     categoryId: v.optional(v.id("categories")),
     publicCode: v.optional(v.string()),
     createdAt: v.number(),
@@ -131,6 +135,26 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_status", ["status"])
     .index("by_category", ["categoryId"])
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_status_and_priceCents_and_createdAt", ["status", "priceCents", "createdAt"])
+    .index("by_status_and_inStock_and_createdAt", ["status", "inStock", "createdAt"])
+    .index(
+      "by_status_and_inStock_and_priceCents_and_createdAt",
+      ["status", "inStock", "priceCents", "createdAt"],
+    )
+    .index("by_category_and_status_and_createdAt", ["categoryId", "status", "createdAt"])
+    .index(
+      "by_category_and_status_and_priceCents_and_createdAt",
+      ["categoryId", "status", "priceCents", "createdAt"],
+    )
+    .index(
+      "by_category_and_status_and_inStock_and_createdAt",
+      ["categoryId", "status", "inStock", "createdAt"],
+    )
+    .index(
+      "by_category_and_status_and_inStock_and_priceCents_and_createdAt",
+      ["categoryId", "status", "inStock", "priceCents", "createdAt"],
+    )
     .index("by_public_code", ["publicCode"]),
 
   orders: defineTable({
