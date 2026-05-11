@@ -11,10 +11,33 @@ export function GlobalSearch() {
   const searchParams = useSearchParams();
   const qParam = searchParams.get("q") ?? "";
   const [value, setValue] = useState(qParam);
+  const [debounced, setDebounced] = useState(qParam);
 
   useEffect(() => {
     setValue(qParam);
+    setDebounced(qParam);
   }, [qParam]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), 350);
+    return () => window.clearTimeout(t);
+  }, [value]);
+
+  useEffect(() => {
+    // Only auto-navigate while user is already on search page.
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!window.location.pathname.startsWith("/search")) {
+      return;
+    }
+    const q = debounced.trim();
+    if (q) {
+      router.replace(`/search?q=${encodeURIComponent(q)}`);
+    } else {
+      router.replace("/search");
+    }
+  }, [debounced, router]);
 
   const onSubmit = useCallback(
     (e: FormEvent<HTMLFormElement>) => {

@@ -44,6 +44,16 @@ export function HeaderUserMenu({ user, isAdmin }: HeaderUserMenuProps) {
 
   const fallback = userInitials(user.name, user.email);
   const currentTheme = (theme ?? "system") as "light" | "dark" | "system";
+  const accountAriaLabel = `Account (${user.name || user.email})`;
+
+  const renderAvatar = () => (
+    <Avatar className="size-8">
+      {user.image ? (
+        <AvatarImage src={user.image} alt="" className="object-cover" />
+      ) : null}
+      <AvatarFallback className="text-xs">{fallback}</AvatarFallback>
+    </Avatar>
+  );
 
   return (
     <>
@@ -72,21 +82,27 @@ export function HeaderUserMenu({ user, isAdmin }: HeaderUserMenuProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Button
+        asChild
+        variant="ghost"
+        size="icon"
+        className="relative size-9 shrink-0 rounded-full p-0 md:hidden"
+      >
+        <Link href="/account" aria-label={accountAriaLabel}>
+          {renderAvatar()}
+        </Link>
+      </Button>
+
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="relative size-9 shrink-0 rounded-full p-0"
-            aria-label={`Account (${user.name || user.email})`}
+            className="relative size-9 shrink-0 rounded-full p-0 hidden md:inline-flex"
+            aria-label={accountAriaLabel}
           >
-            <Avatar className="size-8">
-              {user.image ? (
-                <AvatarImage src={user.image} alt="" className="object-cover" />
-              ) : null}
-              <AvatarFallback className="text-xs">{fallback}</AvatarFallback>
-            </Avatar>
+            {renderAvatar()}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end">

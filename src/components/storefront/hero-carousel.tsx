@@ -60,7 +60,7 @@ export function HeroCarousel() {
     return (
       <div className="relative w-full">
         <div
-          className="min-h-[min(60vh,28rem)] w-full rounded-none bg-muted/20 sm:rounded-lg"
+          className="min-h-[min(36vh,20rem)] w-full rounded-none bg-muted/20 sm:min-h-[min(60vh,28rem)] sm:rounded-lg"
           aria-hidden
         />
       </div>
@@ -75,7 +75,7 @@ export function HeroCarousel() {
             <div key={`${slide.href ?? slide.title}-${i}`} className="min-w-0 flex-[0_0_100%] pl-0">
               <div
                 className={cn(
-                  "relative flex min-h-[min(60vh,28rem)] flex-col justify-end overflow-hidden px-6 py-10 sm:px-10 sm:py-16",
+                  "relative flex min-h-[min(36vh,20rem)] flex-col justify-end overflow-hidden px-6 py-10 sm:min-h-[min(60vh,28rem)] sm:px-10 sm:py-16",
                 )}
               >
                 <img

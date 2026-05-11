@@ -7,26 +7,25 @@ import { api } from "@convex/_generated/api";
 import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { digitsOnlyForWaMe, whatsappMeUrl } from "@/lib/whatsapp";
 
-const DEFAULT_NAME = "Ells Import";
-
 export function SiteFooter() {
   const s = useQuery(api.settings.storefrontSettings);
   const year = new Date().getFullYear();
-  const name = s?.storeName?.trim() || DEFAULT_NAME;
+  const name = s?.storeName?.trim();
   const email = s?.supportEmail?.trim();
   const waDigits = digitsOnlyForWaMe(s?.whatsappNumber ?? null);
   const whatsappHref = waDigits
     ? whatsappMeUrl(
         waDigits,
-        `Hello ${name}! I have a question about an order or a product.`,
+        name ? `Hello ${name}! I have a question about an order or a product.` : "Hello! I have a question about an order or a product.",
       )
     : null;
 
   return (
-    <footer className="bg-muted/20 border-t mt-auto print:hidden">
+    <footer className="bg-muted/20 mt-auto hidden border-t pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:block md:pb-0 print:hidden">
       <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-6 text-sm sm:flex-row sm:items-center sm:justify-between sm:py-8">
         <p>
-          © {year} {name}
+          © {year}
+          {name ? ` ${name}` : null}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6 sm:gap-y-2">
           <Link

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
+import { ConvexImage } from "@/components/convex-image";
 
 import { api } from "@convex/_generated/api";
 import { formatPrice } from "@/lib/formatPrice";
@@ -48,9 +49,11 @@ function SearchContentInner() {
           >
             {p.thumbnailUrl ? (
               <div className="bg-muted/30 border-border aspect-[4/3] w-full overflow-hidden rounded-md border sm:h-20 sm:w-20 sm:shrink-0 sm:aspect-square">
-                <img
+                <ConvexImage
                   src={p.thumbnailUrl}
-                  alt=""
+                  alt={p.name}
+                  width={80}
+                  height={80}
                   className="h-full w-full object-cover transition group-hover:scale-[1.02]"
                 />
               </div>

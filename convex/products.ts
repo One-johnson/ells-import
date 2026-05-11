@@ -3,6 +3,8 @@ import { mutation, query } from "./_generated/server";
 import { allocatePublicCode } from "./lib/publicCode";
 import { requireAdmin, resolveSession } from "./lib/sessionAuth";
 import { productStatus } from "./schema";
+import { paginationOptsValidator } from "convex/server";
+import type { Id } from "./_generated/dataModel";
 
 const productFields = {
   name: v.string(),
@@ -16,6 +18,8 @@ const productFields = {
   imageIds: v.optional(v.array(v.id("_storage"))),
   status: productStatus,
   stock: v.number(),
+  initialStock: v.optional(v.number()),
+  inStock: v.optional(v.boolean()),
   categoryId: v.optional(v.id("categories")),
 } as const;
 
@@ -52,6 +56,28 @@ export const searchActive = query({
           ? await ctx.storage.getUrl(p.imageIds[0])
           : null,
       })),
+    );
+  },
+});
+
+export const getManyForCart = query({
+  args: { productIds: v.array(v.id("products")) },
+  handler: async (ctx, { productIds }) => {
+    const unique = Array.from(new Set(productIds)).slice(0, 200);
+    const docs = await Promise.all(unique.map((id) => ctx.db.get(id)));
+    return await Promise.all(
+      docs
+        .filter((p): p is NonNullable<typeof p> => p != null)
+        .map(async (p) => ({
+          _id: p._id,
+          name: p.name,
+          slug: p.slug,
+          priceCents: p.priceCents,
+          currency: p.currency,
+          stock: p.stock,
+          status: p.status,
+          thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
+        })),
     );
   },
 });
@@ -93,6 +119,243 @@ export const listActive = query({
           : null,
       })),
     );
+  },
+});
+
+export const listBestSellers = query({
+  args: {
+    limit: v.optional(v.number()),
+    lookbackDays: v.optional(v.number()),
+    maxOrders: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit = 8, lookbackDays = 30, maxOrders = 200 }) => {
+    const cap = Math.min(Math.max(1, limit), 24);
+    const maxOrderCap = Math.min(Math.max(1, maxOrders), 500);
+    const since = Date.now() - Math.max(1, Math.min(365, lookbackDays)) * 24 * 60 * 60 * 1000;
+
+    const statuses = ["paid", "shipped", "delivered"] as const;
+    const orderRows = (
+      await Promise.all(
+        statuses.map((s) =>
+          ctx.db
+            .query("orders")
+            .withIndex("by_status", (q) => q.eq("status", s))
+            .order("desc")
+            .take(maxOrderCap),
+        ),
+      )
+    )
+      .flat()
+      .filter((o) => o.createdAt >= since)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, maxOrderCap);
+
+    const qtyByProductId = new Map<string, number>();
+    for (const o of orderRows) {
+      const lines = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", o._id))
+        .collect();
+      for (const line of lines) {
+        qtyByProductId.set(line.productId, (qtyByProductId.get(line.productId) ?? 0) + line.quantity);
+      }
+    }
+
+    const topIds = Array.from(qtyByProductId.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, cap)
+      .map(([id]) => id as Id<"products">);
+
+    const docs = await Promise.all(topIds.map((id) => ctx.db.get(id)));
+    const active = docs.filter((p): p is NonNullable<typeof p> => Boolean(p && p.status === "active"));
+
+    return await Promise.all(
+      active.map(async (p) => ({
+        ...p,
+        thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
+      })),
+    );
+  },
+});
+
+export const listTrending = query({
+  args: {
+    limit: v.optional(v.number()),
+    lookbackDays: v.optional(v.number()),
+    maxOrders: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit = 8, lookbackDays = 7, maxOrders = 200 }) => {
+    const cap = Math.min(Math.max(1, limit), 24);
+    const maxOrderCap = Math.min(Math.max(1, maxOrders), 500);
+    const since = Date.now() - Math.max(1, Math.min(365, lookbackDays)) * 24 * 60 * 60 * 1000;
+
+    const statuses = ["paid", "shipped", "delivered"] as const;
+    const orderRows = (
+      await Promise.all(
+        statuses.map((s) =>
+          ctx.db
+            .query("orders")
+            .withIndex("by_status", (q) => q.eq("status", s))
+            .order("desc")
+            .take(maxOrderCap),
+        ),
+      )
+    )
+      .flat()
+      .filter((o) => o.createdAt >= since)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, maxOrderCap);
+
+    const qtyByProductId = new Map<Id<"products">, number>();
+    for (const o of orderRows) {
+      const lines = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", o._id))
+        .collect();
+      for (const line of lines) {
+        qtyByProductId.set(line.productId, (qtyByProductId.get(line.productId) ?? 0) + line.quantity);
+      }
+    }
+
+    const topIds = Array.from(qtyByProductId.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, cap)
+      .map(([id]) => id);
+
+    const docs = await Promise.all(topIds.map((id) => ctx.db.get(id)));
+    const active = docs.filter((p): p is NonNullable<typeof p> => Boolean(p && p.status === "active"));
+
+    return await Promise.all(
+      active.map(async (p) => ({
+        ...p,
+        thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
+      })),
+    );
+  },
+});
+
+const storefrontSort = v.union(
+  v.literal("newest"),
+  v.literal("price_asc"),
+  v.literal("price_desc"),
+);
+
+export const listActivePaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    sort: v.optional(storefrontSort),
+    categoryId: v.optional(v.id("categories")),
+    inStockOnly: v.optional(v.boolean()),
+    minPriceCents: v.optional(v.number()),
+    maxPriceCents: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { paginationOpts, sort = "newest", categoryId, inStockOnly, minPriceCents, maxPriceCents },
+  ) => {
+    const status = "active" as const;
+    const inStock = inStockOnly ? true : undefined;
+    const min = minPriceCents !== undefined ? Math.max(0, Math.floor(minPriceCents)) : undefined;
+    const max = maxPriceCents !== undefined ? Math.max(0, Math.floor(maxPriceCents)) : undefined;
+
+    const base =
+      categoryId !== undefined
+        ? sort === "newest"
+          ? inStockOnly
+            ? ctx.db
+                .query("products")
+                .withIndex("by_category_and_status_and_inStock_and_createdAt", (q) =>
+                  q.eq("categoryId", categoryId).eq("status", status).eq("inStock", true),
+                )
+                .order("desc")
+            : ctx.db
+                .query("products")
+                .withIndex("by_category_and_status_and_createdAt", (q) =>
+                  q.eq("categoryId", categoryId).eq("status", status),
+                )
+                .order("desc")
+          : inStockOnly
+            ? ctx.db
+                .query("products")
+                .withIndex(
+                  "by_category_and_status_and_inStock_and_priceCents_and_createdAt",
+                  (q) =>
+                    (max !== undefined
+                      ? q
+                          .eq("categoryId", categoryId)
+                          .eq("status", status)
+                          .eq("inStock", true)
+                          .gte("priceCents", min ?? 0)
+                          .lte("priceCents", max)
+                      : q
+                          .eq("categoryId", categoryId)
+                          .eq("status", status)
+                          .eq("inStock", true)
+                          .gte("priceCents", min ?? 0)),
+                )
+                .order(sort === "price_desc" ? "desc" : "asc")
+            : ctx.db
+                .query("products")
+                .withIndex("by_category_and_status_and_priceCents_and_createdAt", (q) =>
+                  max !== undefined
+                    ? q
+                        .eq("categoryId", categoryId)
+                        .eq("status", status)
+                        .gte("priceCents", min ?? 0)
+                        .lte("priceCents", max)
+                    : q.eq("categoryId", categoryId).eq("status", status).gte("priceCents", min ?? 0),
+                )
+                .order(sort === "price_desc" ? "desc" : "asc")
+        : sort === "newest"
+          ? inStockOnly
+            ? ctx.db
+                .query("products")
+                .withIndex("by_status_and_inStock_and_createdAt", (q) =>
+                  q.eq("status", status).eq("inStock", true),
+                )
+                .order("desc")
+            : ctx.db
+                .query("products")
+                .withIndex("by_status_and_createdAt", (q) => q.eq("status", status))
+                .order("desc")
+          : inStockOnly
+            ? ctx.db
+                .query("products")
+                .withIndex("by_status_and_inStock_and_priceCents_and_createdAt", (q) =>
+                  max !== undefined
+                    ? q
+                        .eq("status", status)
+                        .eq("inStock", true)
+                        .gte("priceCents", min ?? 0)
+                        .lte("priceCents", max)
+                    : q.eq("status", status).eq("inStock", true).gte("priceCents", min ?? 0),
+                )
+                .order(sort === "price_desc" ? "desc" : "asc")
+            : ctx.db
+                .query("products")
+                .withIndex("by_status_and_priceCents_and_createdAt", (q) =>
+                  max !== undefined
+                    ? q.eq("status", status).gte("priceCents", min ?? 0).lte("priceCents", max)
+                    : q.eq("status", status).gte("priceCents", min ?? 0),
+                )
+                .order(sort === "price_desc" ? "desc" : "asc");
+
+    const page = await base.paginate(paginationOpts);
+    return {
+      ...page,
+      page: await Promise.all(
+        page.page.map(async (p) => ({
+          ...p,
+          inStock: p.inStock ?? p.stock > 0,
+          thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
+        })),
+      ),
+      sort,
+      inStockOnly: inStockOnly ?? false,
+      inStock,
+      minPriceCents: min ?? null,
+      maxPriceCents: max ?? null,
+    };
   },
 });
 
@@ -168,9 +431,13 @@ export const create = mutation({
     await requireAdmin(ctx, sessionToken);
     const now = Date.now();
     const publicCode = await allocatePublicCode(ctx, "products");
+    const initialStock =
+      args.initialStock !== undefined ? args.initialStock : Math.max(0, Math.floor(args.stock));
     return await ctx.db.insert("products", {
       ...args,
       costPriceCents: args.costPriceCents ?? 0,
+      inStock: args.inStock ?? args.stock > 0,
+      initialStock,
       publicCode,
       createdAt: now,
       updatedAt: now,
@@ -193,6 +460,8 @@ export const update = mutation({
     imageIds: v.optional(v.array(v.id("_storage"))),
     status: v.optional(productStatus),
     stock: v.optional(v.number()),
+    initialStock: v.optional(v.number()),
+    inStock: v.optional(v.boolean()),
     categoryId: v.optional(v.union(v.id("categories"), v.null())),
   },
   handler: async (ctx, { sessionToken, productId, ...rest }) => {
@@ -212,6 +481,17 @@ export const update = mutation({
       }
       patch[k] = val;
     }
+    if (rest.stock !== undefined && rest.initialStock === undefined) {
+      const nextStock = Math.max(0, Math.floor(rest.stock));
+      const prevInitial = typeof prev.initialStock === "number" ? prev.initialStock : prev.stock;
+      // If stock increases above the baseline, treat it as a restock and reset the baseline.
+      if (nextStock > prevInitial) {
+        patch.initialStock = nextStock;
+      }
+    }
+    if (rest.stock !== undefined && rest.inStock === undefined) {
+      patch.inStock = rest.stock > 0;
+    }
     if (rest.imageIds !== undefined) {
       const newIds = rest.imageIds ?? [];
       for (const id of prev.imageIds ?? []) {
@@ -221,6 +501,27 @@ export const update = mutation({
       }
     }
     await ctx.db.patch(productId, patch);
+  },
+});
+
+export const backfillInitialStock = mutation({
+  args: {
+    sessionToken: v.string(),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, { sessionToken, limit = 200, cursor = null }) => {
+    await requireAdmin(ctx, sessionToken);
+    const cap = Math.min(Math.max(1, limit), 500);
+    const page = await ctx.db.query("products").order("desc").paginate({ numItems: cap, cursor });
+    let updated = 0;
+    for (const p of page.page) {
+      if (p.initialStock === undefined) {
+        await ctx.db.patch(p._id, { initialStock: Math.max(0, Math.floor(p.stock)) });
+        updated++;
+      }
+    }
+    return { updated, continueCursor: page.continueCursor, isDone: page.isDone };
   },
 });
 
@@ -344,6 +645,7 @@ export const bulkUpdateFields = mutation({
       }
       if (a.stock !== undefined) {
         patch.stock = a.stock;
+        patch.inStock = a.stock > 0;
       }
       if (a.currency !== undefined) {
         patch.currency = a.currency;

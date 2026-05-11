@@ -16,6 +16,7 @@ import {
 
 import { clearSessionToken, getSessionToken, setSessionToken } from "@/lib/sessionToken";
 import { toast } from "sonner";
+import { clearGuestCart, readGuestCart } from "@/lib/guestCart";
 
 function mutationErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -50,10 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   /** Until `auth.me` resolves after a fresh login/register */
   const [pendingUser, setPendingUser] = useState<PublicUser | null>(null);
+  const [guestMergeAttempted, setGuestMergeAttempted] = useState(false);
 
   const loginMut = useMutation(api.auth.login);
   const registerMut = useMutation(api.auth.register);
   const logoutMut = useMutation(api.auth.logout);
+  const mergeGuestMut = useMutation(api.cart.mergeGuestLines);
 
   const me = useQuery(
     api.auth.me,
@@ -78,9 +81,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (me === null) {
       setSessionTokenState(null);
       setPendingUser(null);
+      setGuestMergeAttempted(false);
       clearSessionToken();
     }
   }, [hydrated, sessionToken, me]);
+
+  useEffect(() => {
+    if (!hydrated || !sessionToken || guestMergeAttempted) {
+      return;
+    }
+    const lines = readGuestCart();
+    if (lines.length === 0) {
+      setGuestMergeAttempted(true);
+      return;
+    }
+    // Fire-and-forget; even if merge fails, don't block auth.
+    void (async () => {
+      try {
+        await mergeGuestMut({
+          sessionToken,
+          lines: lines.map((l) => ({ productId: l.productId as Id<"products">, quantity: l.quantity })),
+        });
+        clearGuestCart();
+      } catch {
+        // Keep guest cart if merge fails.
+      } finally {
+        setGuestMergeAttempted(true);
+      }
+    })();
+  }, [hydrated, sessionToken, guestMergeAttempted, mergeGuestMut]);
 
   const user = me?.user ?? pendingUser ?? null;
 
@@ -97,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionToken(res.sessionToken);
         setSessionTokenState(res.sessionToken);
         setPendingUser(res.user);
+        setGuestMergeAttempted(false);
       } catch (e) {
         toast.error(mutationErrorMessage(e));
         throw e;
@@ -112,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionToken(res.sessionToken);
         setSessionTokenState(res.sessionToken);
         setPendingUser(res.user);
+        setGuestMergeAttempted(false);
       } catch (e) {
         toast.error(mutationErrorMessage(e));
         throw e;

@@ -18,6 +18,15 @@ const withPWA = withPWAInit({
 const nextConfig: NextConfig = {
   // PWA uses webpack; Next 16 defaults to Turbopack for `dev` / `build` — use
   // `npm run dev` / `npm run build` (scripts pass `--webpack`) to avoid a conflict.
+  images: {
+    remotePatterns: [
+      // Convex file storage signed URLs are hosted on Convex domains.
+      { protocol: "https", hostname: "**.convex.cloud" },
+      { protocol: "https", hostname: "**.convex.site" },
+      // Fallback for common CDN patterns; add more as needed.
+      { protocol: "https", hostname: "**.vercel-storage.com" },
+    ],
+  },
 };
 
 export default withPWA(nextConfig);

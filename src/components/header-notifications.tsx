@@ -134,7 +134,7 @@ export function HeaderNotifications({ sessionToken }: HeaderNotificationsProps) 
         type="button"
         variant="ghost"
         size="icon"
-        className="text-muted-foreground relative shrink-0"
+        className="text-muted-foreground border-border relative shrink-0 rounded-full border"
         aria-label={hasUnread ? `Notifications, ${unreadCount} unread` : "Notifications"}
         onClick={() => setOpen(true)}
       >
@@ -145,7 +145,7 @@ export function HeaderNotifications({ sessionToken }: HeaderNotificationsProps) 
           </span>
         )}
       </Button>
-      <DrawerContent className="flex h-full w-full max-w-md flex-col gap-0 overflow-hidden p-0">
+      <DrawerContent className="flex h-full w-full max-w-md flex-col gap-0 overflow-hidden p-0 pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         <DrawerHeader className="border-border shrink-0 border-b px-4 py-4 text-left">
           <DrawerTitle>Notifications</DrawerTitle>
           <DrawerDescription>Recent activity and updates for your account.</DrawerDescription>

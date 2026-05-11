@@ -34,6 +34,29 @@ export const list = query({
   },
 });
 
+export const listWithThumbnails = query({
+  args: { parentId: v.optional(v.id("categories")), limit: v.optional(v.number()) },
+  handler: async (ctx, { parentId, limit }) => {
+    const all = await ctx.db.query("categories").collect();
+    const filtered = all
+      .filter((c) => {
+        if (parentId === undefined) {
+          return c.parentId === undefined;
+        }
+        return c.parentId === parentId;
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      .slice(0, Math.max(1, Math.min(200, limit ?? 32)));
+
+    return await Promise.all(
+      filtered.map(async (c) => ({
+        ...c,
+        thumbnailUrl: c.imageId ? await ctx.storage.getUrl(c.imageId) : null,
+      })),
+    );
+  },
+});
+
 export const listAll = query({
   args: {},
   handler: async (ctx) => {

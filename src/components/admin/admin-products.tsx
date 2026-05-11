@@ -106,6 +106,7 @@ type ProductFormState = {
   imageIds: Id<"_storage">[];
   status: ProductStatus;
   stock: string;
+  initialStock: string;
   categoryId: string;
 };
 
@@ -120,6 +121,7 @@ function emptyForm(): ProductFormState {
     imageIds: [],
     status: "draft",
     stock: "0",
+    initialStock: "",
     categoryId: "",
   };
 }
@@ -135,6 +137,7 @@ function docToForm(p: Doc<"products">): ProductFormState {
     imageIds: [...(p.imageIds ?? [])],
     status: p.status,
     stock: String(p.stock),
+    initialStock: p.initialStock === undefined ? "" : String(p.initialStock),
     categoryId: p.categoryId ?? "",
   };
 }
@@ -390,6 +393,14 @@ export function AdminProducts() {
       setErr("Stock must be a non-negative integer.");
       return;
     }
+    const initialStock =
+      form.initialStock.trim() === ""
+        ? undefined
+        : Number.parseInt(form.initialStock, 10);
+    if (initialStock !== undefined && (Number.isNaN(initialStock) || initialStock < 0)) {
+      setErr("Initial stock must be a non-negative integer (or leave blank).");
+      return;
+    }
     const slug = form.slug.trim() || slugify(form.name);
     if (!slug) {
       setErr("Slug is required (or provide a name to derive it).");
@@ -413,6 +424,7 @@ export function AdminProducts() {
           imageIds: form.imageIds,
           status: form.status,
           stock,
+          initialStock,
           categoryId: form.categoryId === "" ? null : categoryId,
         });
         newSessionUploads.current.clear();
@@ -429,6 +441,7 @@ export function AdminProducts() {
           imageIds: form.imageIds.length ? form.imageIds : undefined,
           status: form.status,
           stock,
+          ...(initialStock !== undefined ? { initialStock } : {}),
           categoryId,
         });
         newSessionUploads.current.clear();
@@ -1403,15 +1416,41 @@ export function AdminProducts() {
                 placeholder="—"
               />
             </div>
-            <div className="grid gap-1.5 sm:max-w-xs">
-              <Label htmlFor="p-stock">Stock</Label>
-              <Input
-                id="p-stock"
-                inputMode="numeric"
-                value={form.stock}
-                onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-                required
-              />
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-3 sm:max-w-xl">
+              <div className="grid gap-1.5">
+                <Label htmlFor="p-stock">Stock</Label>
+                <Input
+                  id="p-stock"
+                  inputMode="numeric"
+                  value={form.stock}
+                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <div className="flex items-end justify-between gap-2">
+                  <Label htmlFor="p-initial-stock">Initial stock (baseline)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setForm((f) => ({ ...f, initialStock: f.stock }))}
+                  >
+                    Reset to current
+                  </Button>
+                </div>
+                <Input
+                  id="p-initial-stock"
+                  inputMode="numeric"
+                  value={form.initialStock}
+                  onChange={(e) => setForm((f) => ({ ...f, initialStock: e.target.value }))}
+                  placeholder="(optional)"
+                />
+                <p className="text-muted-foreground text-xs">
+                  Used for the storefront stock progress bar. Leave blank to auto-set.
+                </p>
+              </div>
             </div>
             <div className="grid gap-1.5 sm:grid-cols-2 sm:gap-3">
               <div className="grid gap-1.5">
