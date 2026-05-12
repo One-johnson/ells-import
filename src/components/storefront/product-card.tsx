@@ -16,6 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
 import { ProductQuickViewDrawer } from "@/components/storefront/product-quick-view-drawer";
+import { StockProgressBar } from "@/components/storefront/stock-progress-bar";
 
 export type ProductCardProduct = {
   _id: string;
@@ -63,8 +64,6 @@ export function ProductCard({ product, className }: ProductCardProps) {
   const out = product.stock <= 0;
   const lowStockThreshold = 3;
   const low = !out && product.stock > 0 && product.stock <= lowStockThreshold;
-  const baseline = Math.max(1, Math.floor(product.initialStock ?? product.stock));
-  const pct = Math.max(0, Math.min(100, Math.round((product.stock / baseline) * 100)));
 
   const onAddToCart = useCallback(
     async (e: React.MouseEvent) => {
@@ -204,16 +203,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
           <p className="text-foreground line-clamp-2 text-sm font-medium leading-snug">{product.name}</p>
           {!out ? (
             <div className="mt-1">
-              <div className="bg-muted h-1.5 w-full rounded-full">
-                <div
-                  className={cn(
-                    "h-1.5 rounded-full transition-[width]",
-                    pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-amber-500" : "bg-primary",
-                  )}
-                  style={{ width: `${pct}%` }}
-                  aria-hidden
-                />
-              </div>
+              <StockProgressBar stock={product.stock} initialStock={product.initialStock} />
               <p className="text-muted-foreground mt-1 text-xs tabular-nums">{product.stock} in stock</p>
             </div>
           ) : (
@@ -228,16 +218,7 @@ export function ProductCard({ product, className }: ProductCardProps) {
           <p className="text-foreground line-clamp-2 text-sm font-medium leading-snug">{product.name}</p>
           {!out ? (
             <div className="mt-1">
-              <div className="bg-muted h-1.5 w-full rounded-full">
-                <div
-                  className={cn(
-                    "h-1.5 rounded-full transition-[width]",
-                    pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-amber-500" : "bg-primary",
-                  )}
-                  style={{ width: `${pct}%` }}
-                  aria-hidden
-                />
-              </div>
+              <StockProgressBar stock={product.stock} initialStock={product.initialStock} />
               <p className="text-muted-foreground mt-1 text-xs tabular-nums">{product.stock} in stock</p>
             </div>
           ) : (

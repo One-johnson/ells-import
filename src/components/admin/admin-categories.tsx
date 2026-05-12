@@ -79,6 +79,7 @@ import { slugify } from "@/lib/slug";
 import { useAuth } from "@/providers/auth-provider";
 import { useConvexFileUpload } from "@/hooks/use-convex-file-upload";
 
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { BulkAddCategoriesDialog } from "./bulk-add-categories-dialog";
 import { StorageImagePreview } from "./storage-image-preview";
 
@@ -193,6 +194,9 @@ export function AdminCategories() {
   const [parentBulkOpen, setParentBulkOpen] = useState(false);
   const [parentBulk, setParentBulk] = useState<string>("__root__");
   const [detailCategory, setDetailCategory] = useState<CategoryRow | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<
+    null | { kind: "single"; id: Id<"categories"> } | { kind: "bulk" }
+  >(null);
 
   const { ordered: treeRows, byId } = useMemo(() => {
     if (!all) {
@@ -325,28 +329,9 @@ export function AdminCategories() {
     }
   };
 
-  const onDelete = useCallback(
-    async (id: Id<"categories">) => {
-      if (!sessionToken) {
-        return;
-      }
-      if (!window.confirm("Delete this category?")) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, categoryId: id });
-        setRowSelection((prev) => {
-          const p = { ...prev };
-          delete p[id as string];
-          return p;
-        });
-      } catch (caught) {
-        setErr(caught instanceof Error ? caught.message : "Delete failed.");
-      }
-    },
-    [sessionToken, removeMut],
-  );
+  const requestDeleteCategory = useCallback((id: Id<"categories">) => {
+    setDeletePrompt({ kind: "single", id });
+  }, []);
 
   const bumpSort = useCallback(
     async (id: Id<"categories">, delta: number) => {
@@ -388,22 +373,6 @@ export function AdminCategories() {
       (k) => rowSelection[k],
     );
   }, [rowSelection]);
-
-  const onBulkDelete = async () => {
-    if (!sessionToken || selectedCategoryIds.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${selectedCategoryIds.length} categories?`)) {
-      return;
-    }
-    setErr(null);
-    try {
-      await bulkRemoveMut({ sessionToken, categoryIds: selectedCategoryIds });
-      setRowSelection({});
-    } catch (caught) {
-      setErr(caught instanceof Error ? caught.message : "Bulk delete failed.");
-    }
-  };
 
   const onApplyBulkParent = async () => {
     if (!sessionToken || selectedCategoryIds.length === 0) {
@@ -589,7 +558,7 @@ export function AdminCategories() {
                 <DropdownMenuItem onClick={() => openEdit(c)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => void onDelete(c._id)}
+                  onClick={() => requestDeleteCategory(c._id)}
                 >
                   <Trash2 className="text-destructive" />
                   Delete
@@ -602,7 +571,7 @@ export function AdminCategories() {
         enableSorting: false,
       },
     ],
-    [byId, openEdit, onDelete, bumpSort],
+    [byId, openEdit, requestDeleteCategory, bumpSort],
   );
 
   const table = useReactTable({
@@ -726,7 +695,7 @@ export function AdminCategories() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => void onBulkDelete()}
+                onClick={() => setDeletePrompt({ kind: "bulk" })}
               >
                 <Trash2 className="text-destructive" />
                 Delete selected
@@ -1136,6 +1105,44 @@ export function AdminCategories() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AdminConfirmDeleteDialog
+        open={deletePrompt !== null}
+        onOpenChange={(o) => !o && setDeletePrompt(null)}
+        title={
+          deletePrompt?.kind === "bulk"
+            ? `Delete ${selectedCategoryIds.length} categories?`
+            : "Delete this category?"
+        }
+        description={
+          deletePrompt?.kind === "bulk"
+            ? `This will permanently remove ${selectedCategoryIds.length} categories. Child categories may be affected depending on server rules. This cannot be undone.`
+            : "This will permanently remove this category. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deletePrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deletePrompt.kind === "single") {
+              const id = deletePrompt.id;
+              await removeMut({ sessionToken, categoryId: id });
+              setRowSelection((prev) => {
+                const p = { ...prev };
+                delete p[id as string];
+                return p;
+              });
+            } else {
+              await bulkRemoveMut({ sessionToken, categoryIds: selectedCategoryIds });
+              setRowSelection({});
+            }
+          } catch (caught) {
+            setErr(caught instanceof Error ? caught.message : "Delete failed.");
+            throw caught;
+          }
+        }}
+      />
     </div>
   );
 }

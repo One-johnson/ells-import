@@ -6,7 +6,9 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -26,12 +28,17 @@ export function AdminAppSettings() {
   const setMut = useMutation(api.settings.setApp);
   const updateMut = useMutation(api.settings.updateApp);
   const removeMut = useMutation(api.settings.removeApp);
+  const bulkRemoveAppMut = useMutation(api.settings.bulkRemoveApp);
 
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [editingId, setEditingId] = useState<Id<"appSettings"> | null>(null);
   const [editValue, setEditValue] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [deletePrompt, setDeletePrompt] = useState<
+    null | { kind: "single"; id: Id<"appSettings"> } | { kind: "bulk" }
+  >(null);
 
   const sorted = useMemo(() => {
     if (!rows) {
@@ -79,26 +86,29 @@ export function AdminAppSettings() {
     [editValue, sessionToken, updateMut],
   );
 
-  const onRemove = useCallback(
-    async (id: Id<"appSettings">) => {
-      if (!sessionToken) {
-        return;
+  const requestRemoveSetting = useCallback((id: Id<"appSettings">) => {
+    setDeletePrompt({ kind: "single", id });
+  }, []);
+
+  const selectedSettingIds = useMemo((): Id<"appSettings">[] => {
+    return (Object.keys(rowSelection) as Id<"appSettings">[]).filter((k) => rowSelection[k]);
+  }, [rowSelection]);
+
+  const toggleSelectAll = useCallback(() => {
+    if (!sorted.length) {
+      return;
+    }
+    const allSelected = sorted.every((s) => rowSelection[s._id as string]);
+    if (allSelected) {
+      setRowSelection({});
+    } else {
+      const next: Record<string, boolean> = {};
+      for (const s of sorted) {
+        next[s._id as string] = true;
       }
-      if (!window.confirm("Delete this setting?")) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, settingId: id });
-        if (editingId === id) {
-          setEditingId(null);
-        }
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Delete failed.");
-      }
-    },
-    [editingId, removeMut, sessionToken],
-  );
+      setRowSelection(next);
+    }
+  }, [sorted, rowSelection]);
 
   if (!sessionToken) {
     return null;
@@ -166,6 +176,20 @@ export function AdminAppSettings() {
         </div>
       )}
 
+      {selectedSettingIds.length > 0 && (
+        <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium">{selectedSettingIds.length} selected</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            onClick={() => setDeletePrompt({ kind: "bulk" })}
+          >
+            Delete selected
+          </Button>
+        </div>
+      )}
+
       <div className="bg-muted/30 flex flex-col gap-2 rounded-md border p-4 sm:flex-row sm:flex-wrap sm:items-end">
         <div className="min-w-0 flex-1 space-y-1">
           <label className="text-xs font-medium">Key</label>
@@ -198,6 +222,15 @@ export function AdminAppSettings() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      sorted.length > 0 && sorted.every((s) => rowSelection[s._id as string])
+                    }
+                    onCheckedChange={() => toggleSelectAll()}
+                    aria-label="Select all settings"
+                  />
+                </TableHead>
                 <TableHead>Key</TableHead>
                 <TableHead>Value</TableHead>
                 <TableHead className="w-[1%]">Updated</TableHead>
@@ -207,6 +240,18 @@ export function AdminAppSettings() {
             <TableBody>
               {sorted.map((s) => (
                 <TableRow key={s._id}>
+                  <TableCell className="w-10">
+                    <Checkbox
+                      checked={!!rowSelection[s._id as string]}
+                      onCheckedChange={(v) =>
+                        setRowSelection((prev) => ({
+                          ...prev,
+                          [s._id as string]: !!v,
+                        }))
+                      }
+                      aria-label={`Select ${s.key}`}
+                    />
+                  </TableCell>
                   <TableCell className="font-mono text-sm">{s.key}</TableCell>
                   <TableCell>
                     {editingId === s._id ? (
@@ -251,7 +296,7 @@ export function AdminAppSettings() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive size-8"
-                        onClick={() => void onRemove(s._id)}
+                        onClick={() => requestRemoveSetting(s._id)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -263,6 +308,48 @@ export function AdminAppSettings() {
           </Table>
         </div>
       )}
+
+      <AdminConfirmDeleteDialog
+        open={deletePrompt !== null}
+        onOpenChange={(o) => !o && setDeletePrompt(null)}
+        title={
+          deletePrompt?.kind === "bulk"
+            ? `Delete ${selectedSettingIds.length} settings?`
+            : "Delete this setting?"
+        }
+        description={
+          deletePrompt?.kind === "bulk"
+            ? `This will permanently remove ${selectedSettingIds.length} key–value rows. The storefront may fall back to defaults where keys disappear. This cannot be undone.`
+            : "This will permanently remove this key–value row. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deletePrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deletePrompt.kind === "single") {
+              const id = deletePrompt.id;
+              await removeMut({ sessionToken, settingId: id });
+              if (editingId === id) {
+                setEditingId(null);
+              }
+              setRowSelection((prev) => {
+                const p = { ...prev };
+                delete p[id as string];
+                return p;
+              });
+            } else {
+              await bulkRemoveAppMut({ sessionToken, settingIds: selectedSettingIds });
+              setRowSelection({});
+              setEditingId((e) => (e && selectedSettingIds.includes(e) ? null : e));
+            }
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Delete failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }

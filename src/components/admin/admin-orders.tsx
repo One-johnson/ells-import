@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { orderStatusLabel, paymentMethodLabel, paymentStatusLabel } from "@/components/admin/labels";
 import {
   downloadAdminOrderDetailPdf,
@@ -137,6 +138,9 @@ export function AdminOrders() {
   const [statusBulk, setStatusBulk] = useState<Doc<"orders">["status"]>("pending");
   const [sharingOrderId, setSharingOrderId] = useState<Id<"orders"> | null>(null);
   const [pdfBusy, setPdfBusy] = useState<false | "detail" | "invoice">(false);
+  const [deleteOrderPrompt, setDeleteOrderPrompt] = useState<
+    null | { kind: "single"; orderId: Id<"orders"> } | { kind: "bulk" }
+  >(null);
 
   const rows = useQuery(
     api.orders.listWithCustomers,
@@ -262,29 +266,9 @@ export function AdminOrders() {
     [sessionToken, setStatusMut],
   );
 
-  const onDeleteOrder = useCallback(
-    async (orderId: Id<"orders">) => {
-      if (!sessionToken) {
-        return;
-      }
-      if (!window.confirm("Delete this order and its line items?")) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, orderId });
-        setDetailId(null);
-        setRowSelection((prev) => {
-          const p = { ...prev };
-          delete p[orderId as string];
-          return p;
-        });
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Delete failed.");
-      }
-    },
-    [sessionToken, removeMut],
-  );
+  const requestDeleteOrder = useCallback((orderId: Id<"orders">) => {
+    setDeleteOrderPrompt({ kind: "single", orderId });
+  }, []);
 
   const selectedOrderIds = useMemo((): Id<"orders">[] => {
     return (Object.keys(rowSelection) as Id<"orders">[]).filter((k) => rowSelection[k]);
@@ -305,22 +289,6 @@ export function AdminOrders() {
       setStatusBulkOpen(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Bulk update failed.");
-    }
-  };
-
-  const onBulkDelete = async () => {
-    if (!sessionToken || selectedOrderIds.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${selectedOrderIds.length} order(s) and their line items?`)) {
-      return;
-    }
-    setErr(null);
-    try {
-      await bulkRemoveMut({ sessionToken, orderIds: selectedOrderIds });
-      setRowSelection({});
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Bulk delete failed.");
     }
   };
 
@@ -543,7 +511,7 @@ export function AdminOrders() {
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem
                     className="text-destructive"
-                    onClick={() => void onDeleteOrder(o._id)}
+                    onClick={() => requestDeleteOrder(o._id)}
                   >
                     Delete order
                   </DropdownMenuItem>
@@ -556,7 +524,7 @@ export function AdminOrders() {
         enableSorting: false,
       },
     ],
-    [onSetStatus, onDeleteOrder, shareInvoice, sharingOrderId],
+    [onSetStatus, requestDeleteOrder, shareInvoice, sharingOrderId],
   );
 
   // TanStack Table API is incompatible with React Compiler memoization rules; safe here.
@@ -741,7 +709,7 @@ export function AdminOrders() {
               type="button"
               size="sm"
               variant="destructive"
-              onClick={() => void onBulkDelete()}
+              onClick={() => setDeleteOrderPrompt({ kind: "bulk" })}
             >
               Delete selected
             </Button>
@@ -1082,7 +1050,7 @@ export function AdminOrders() {
                 type="button"
                 variant="destructive"
                 className="w-full sm:w-auto"
-                onClick={() => void onDeleteOrder(detail.order._id)}
+                onClick={() => requestDeleteOrder(detail.order._id)}
               >
                 Delete order
               </Button>
@@ -1090,6 +1058,46 @@ export function AdminOrders() {
           ) : null}
         </DrawerContent>
       </Drawer>
+
+      <AdminConfirmDeleteDialog
+        open={deleteOrderPrompt !== null}
+        onOpenChange={(o) => !o && setDeleteOrderPrompt(null)}
+        title={
+          deleteOrderPrompt?.kind === "bulk"
+            ? `Delete ${selectedOrderIds.length} order(s)?`
+            : "Delete this order?"
+        }
+        description={
+          deleteOrderPrompt?.kind === "bulk"
+            ? `This will permanently remove ${selectedOrderIds.length} order(s) and their line items. This cannot be undone.`
+            : "This will permanently remove this order and its line items. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deleteOrderPrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deleteOrderPrompt.kind === "single") {
+              const orderId = deleteOrderPrompt.orderId;
+              await removeMut({ sessionToken, orderId });
+              setDetailId((d) => (d === orderId ? null : d));
+              setRowSelection((prev) => {
+                const p = { ...prev };
+                delete p[orderId as string];
+                return p;
+              });
+            } else {
+              await bulkRemoveMut({ sessionToken, orderIds: selectedOrderIds });
+              setDetailId((d) => (d && selectedOrderIds.includes(d) ? null : d));
+              setRowSelection({});
+            }
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Delete failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }

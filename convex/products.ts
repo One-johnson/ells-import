@@ -4,7 +4,7 @@ import { allocatePublicCode } from "./lib/publicCode";
 import { requireAdmin, resolveSession } from "./lib/sessionAuth";
 import { productStatus } from "./schema";
 import { paginationOptsValidator } from "convex/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 const productFields = {
   name: v.string(),
@@ -117,6 +117,73 @@ export const listActive = query({
         thumbnailUrl: p.imageIds?.[0]
           ? await ctx.storage.getUrl(p.imageIds[0])
           : null,
+      })),
+    );
+  },
+});
+
+/** Home “Explore the catalog”: up to `perCategory` in-stock active products per category (newest first per category), plus uncategorized. */
+export const listActiveExploreCatalog = query({
+  args: {
+    perCategory: v.optional(v.number()),
+    maxCategories: v.optional(v.number()),
+  },
+  handler: async (ctx, { perCategory = 2, maxCategories }) => {
+    const cap = Math.min(Math.max(1, Math.floor(perCategory)), 6);
+    const cats = await ctx.db.query("categories").collect();
+    cats.sort((a, b) => a.name.localeCompare(b.name));
+    const catSlice =
+      maxCategories !== undefined
+        ? cats.slice(0, Math.max(0, Math.floor(maxCategories)))
+        : cats;
+
+    const seen = new Set<string>();
+    const picked: Doc<"products">[] = [];
+
+    for (const c of catSlice) {
+      const rows = await ctx.db
+        .query("products")
+        .withIndex("by_category_and_status_and_createdAt", (q) =>
+          q.eq("categoryId", c._id).eq("status", "active"),
+        )
+        .order("desc")
+        .take(64);
+      let n = 0;
+      for (const p of rows) {
+        if (p.stock <= 0 || seen.has(p._id)) {
+          continue;
+        }
+        seen.add(p._id);
+        picked.push(p);
+        n++;
+        if (n >= cap) {
+          break;
+        }
+      }
+    }
+
+    const uncategorized = await ctx.db
+      .query("products")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(150);
+    let u = 0;
+    for (const p of uncategorized) {
+      if (p.categoryId !== undefined || p.stock <= 0 || seen.has(p._id)) {
+        continue;
+      }
+      seen.add(p._id);
+      picked.push(p);
+      u++;
+      if (u >= cap) {
+        break;
+      }
+    }
+
+    return await Promise.all(
+      picked.map(async (p) => ({
+        ...p,
+        thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
       })),
     );
   },
@@ -547,10 +614,14 @@ export const bulkCreate = mutation({
     const ids: import("./_generated/dataModel").Id<"products">[] = [];
     for (const item of items) {
       const publicCode = await allocatePublicCode(ctx, "products");
+      const initialStock =
+        item.initialStock !== undefined ? item.initialStock : Math.max(0, Math.floor(item.stock));
       ids.push(
         await ctx.db.insert("products", {
           ...item,
           costPriceCents: item.costPriceCents ?? 0,
+          inStock: item.inStock ?? item.stock > 0,
+          initialStock,
           publicCode,
           createdAt: now,
           updatedAt: now,

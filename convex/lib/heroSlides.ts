@@ -20,7 +20,8 @@ const GRADIENTS: Record<"slate" | "emerald" | "zinc" | "rose" | "blue", string> 
 /** No built-in gradient slides — hero uses images only (JSON + products) for consistent height. */
 const EMPTY_DEFAULT_SLIDES: NormalizedHeroSlide[] = [];
 
-const MAX_SLIDES = 8;
+/** Max slides returned for the home hero (manual JSON first, then products). */
+const MAX_HERO_CAROUSEL_SLIDES = 5;
 
 function isSafeImageUrl(s: string): string | null {
   const t = s.trim();
@@ -123,7 +124,7 @@ export function getHeroSlidesFromJsonValue(value: string | null | undefined): {
     return { source: "default", slides: EMPTY_DEFAULT_SLIDES };
   }
   const out: NormalizedHeroSlide[] = [];
-  for (let i = 0; i < parsed.length && out.length < MAX_SLIDES; i++) {
+  for (let i = 0; i < parsed.length && out.length < MAX_HERO_CAROUSEL_SLIDES; i++) {
     const s = normalizeOne(parsed[i]);
     if (s?.imageUrl) {
       out.push(s);
@@ -135,7 +136,7 @@ export function getHeroSlidesFromJsonValue(value: string | null | undefined): {
   return { source: "config", slides: out };
 }
 
-const MAX_HERO_SLIDES_TOTAL = 8;
+const MAX_HERO_SLIDES_TOTAL = MAX_HERO_CAROUSEL_SLIDES;
 
 export type HeroProductCandidate = {
   name: string;
