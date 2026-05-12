@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { useAuth } from "@/providers/auth-provider";
 
 type ReviewRow = {
@@ -46,6 +47,9 @@ export function AdminReviewsModeration() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
   const [err, setErr] = useState<string | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<
+    null | { kind: "single"; id: Id<"reviews"> } | { kind: "bulk" }
+  >(null);
 
   const raw = useQuery(
     api.reviews.adminListWithDetails,
@@ -56,48 +60,13 @@ export function AdminReviewsModeration() {
 
   const data = useMemo<ReviewRow[]>(() => raw ?? [], [raw]);
 
-  const onDelete = useCallback(
-    async (id: Id<"reviews">) => {
-      if (!sessionToken) {
-        return;
-      }
-      if (!window.confirm("Delete this review?")) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, reviewId: id });
-        setRowSelection((prev) => {
-          const p = { ...prev };
-          delete p[id as string];
-          return p;
-        });
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Delete failed.");
-      }
-    },
-    [removeMut, sessionToken],
-  );
+  const selectedReviewIds = useMemo((): Id<"reviews">[] => {
+    return (Object.keys(rowSelection) as Id<"reviews">[]).filter((k) => rowSelection[k]);
+  }, [rowSelection]);
 
-  const onBulkDelete = useCallback(async () => {
-    if (!sessionToken) {
-      return;
-    }
-    const ids = (Object.keys(rowSelection) as Id<"reviews">[]).filter((k) => rowSelection[k]);
-    if (ids.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${ids.length} review(s)?`)) {
-      return;
-    }
-    setErr(null);
-    try {
-      await bulkRemoveMut({ sessionToken, reviewIds: ids });
-      setRowSelection({});
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Bulk delete failed.");
-    }
-  }, [bulkRemoveMut, rowSelection, sessionToken]);
+  const requestDeleteReview = useCallback((id: Id<"reviews">) => {
+    setDeletePrompt({ kind: "single", id });
+  }, []);
 
   const columns = useMemo<ColumnDef<ReviewRow>[]>(
     () => [
@@ -210,7 +179,7 @@ export function AdminReviewsModeration() {
             variant="outline"
             onClick={(e) => {
               e.stopPropagation();
-              void onDelete(row.original.review._id);
+              requestDeleteReview(row.original.review._id);
             }}
           >
             Remove
@@ -218,7 +187,7 @@ export function AdminReviewsModeration() {
         ),
       },
     ],
-    [onDelete],
+    [requestDeleteReview],
   );
 
   const table = useReactTable({
@@ -255,7 +224,7 @@ export function AdminReviewsModeration() {
     return null;
   }
 
-  const nSel = (Object.keys(rowSelection) as string[]).filter((k) => rowSelection[k]).length;
+  const nSel = selectedReviewIds.length;
 
   return (
     <div className="space-y-4">
@@ -284,7 +253,7 @@ export function AdminReviewsModeration() {
           }}
         />
         {nSel > 0 && (
-          <Button type="button" variant="destructive" size="sm" onClick={() => void onBulkDelete()}>
+          <Button type="button" variant="destructive" size="sm" onClick={() => setDeletePrompt({ kind: "bulk" })}>
             Delete {nSel} selected
           </Button>
         )}
@@ -382,6 +351,44 @@ export function AdminReviewsModeration() {
           </div>
         </div>
       )}
+
+      <AdminConfirmDeleteDialog
+        open={deletePrompt !== null}
+        onOpenChange={(o) => !o && setDeletePrompt(null)}
+        title={
+          deletePrompt?.kind === "bulk"
+            ? `Delete ${selectedReviewIds.length} review(s)?`
+            : "Delete this review?"
+        }
+        description={
+          deletePrompt?.kind === "bulk"
+            ? `This will permanently remove ${selectedReviewIds.length} review(s). This cannot be undone.`
+            : "This will permanently remove this review. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deletePrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deletePrompt.kind === "single") {
+              const id = deletePrompt.id;
+              await removeMut({ sessionToken, reviewId: id });
+              setRowSelection((prev) => {
+                const p = { ...prev };
+                delete p[id as string];
+                return p;
+              });
+            } else {
+              await bulkRemoveMut({ sessionToken, reviewIds: selectedReviewIds });
+              setRowSelection({});
+            }
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Delete failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }

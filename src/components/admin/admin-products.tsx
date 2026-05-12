@@ -26,6 +26,7 @@ import {
   ImageIcon,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Sparkles,
   Trash2,
   Upload,
@@ -86,6 +87,7 @@ import { slugify } from "@/lib/slug";
 import { useAuth } from "@/providers/auth-provider";
 import { useConvexFileUpload } from "@/hooks/use-convex-file-upload";
 
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { BulkAddProductsDialog } from "./bulk-add-products-dialog";
 import { StorageImagePreview } from "./storage-image-preview";
 import { productStatusLabel } from "./labels";
@@ -182,6 +184,7 @@ export function AdminProducts() {
   const bulkStatusMut = useMutation(api.products.bulkUpdateStatus);
   const bulkCategoryMut = useMutation(api.products.bulkSetCategory);
   const bulkUpdateFieldsMut = useMutation(api.products.bulkUpdateFields);
+  const backfillInitialStockMut = useMutation(api.products.backfillInitialStock);
   const generateDescriptionAction = useAction(api.productAi.generateProductDescription);
 
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
@@ -204,6 +207,10 @@ export function AdminProducts() {
   const [stockBulkOpen, setStockBulkOpen] = useState(false);
   const [stockBulk, setStockBulk] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [backfillBaselinesBusy, setBackfillBaselinesBusy] = useState(false);
+  const [deletePrompt, setDeletePrompt] = useState<
+    null | { kind: "single"; id: Id<"products"> } | { kind: "bulk" }
+  >(null);
 
   const firstImageUrl = useQuery(
     api.files.getUrl,
@@ -454,23 +461,9 @@ export function AdminProducts() {
     }
   };
 
-  const onDelete = useCallback(
-    async (id: Id<"products">) => {
-      if (!sessionToken) {
-        return;
-      }
-      if (!window.confirm("Delete this product? This cannot be undone.")) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, productId: id });
-      } catch (caught) {
-        setErr(caught instanceof Error ? caught.message : "Delete failed.");
-      }
-    },
-    [sessionToken, removeMut],
-  );
+  const requestDeleteProduct = useCallback((id: Id<"products">) => {
+    setDeletePrompt({ kind: "single", id });
+  }, []);
 
   const selectedProductIds = useMemo((): Id<"products">[] => {
     return (Object.keys(rowSelection) as Id<"products">[]).filter((k) => rowSelection[k]);
@@ -503,22 +496,6 @@ export function AdminProducts() {
       setRowSelection({});
     } catch (caught) {
       setErr(caught instanceof Error ? caught.message : "Bulk update failed.");
-    }
-  };
-
-  const onBulkDelete = async () => {
-    if (!sessionToken || selectedProductIds.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${selectedProductIds.length} product(s)?`)) {
-      return;
-    }
-    setErr(null);
-    try {
-      await bulkRemoveMut({ sessionToken, productIds: selectedProductIds });
-      setRowSelection({});
-    } catch (caught) {
-      setErr(caught instanceof Error ? caught.message : "Bulk delete failed.");
     }
   };
 
@@ -567,6 +544,50 @@ export function AdminProducts() {
       setStockBulk("");
     } catch (caught) {
       setErr(caught instanceof Error ? caught.message : "Update failed.");
+    }
+  };
+
+  const onBackfillStockBaselines = async () => {
+    if (!sessionToken) {
+      return;
+    }
+    setErr(null);
+    setBackfillBaselinesBusy(true);
+    let total = 0;
+    let cursor: string | null = null;
+    const maxPages = 500;
+    try {
+      for (let page = 0; page < maxPages; page++) {
+        const r: {
+          updated: number;
+          continueCursor: string | null;
+          isDone: boolean;
+        } = await backfillInitialStockMut({
+          sessionToken,
+          limit: 200,
+          cursor,
+        });
+        total += r.updated;
+        if (r.isDone) {
+          break;
+        }
+        if (r.continueCursor === null) {
+          break;
+        }
+        cursor = r.continueCursor;
+      }
+      toast.success("Stock baselines updated", {
+        description:
+          total === 0
+            ? "Every product already had an initial stock baseline."
+            : `Set initial stock baseline on ${total} product${total === 1 ? "" : "s"} (from current stock).`,
+      });
+    } catch (caught) {
+      const msg = caught instanceof Error ? caught.message : "Backfill failed.";
+      setErr(msg);
+      toast.error("Backfill failed", { description: msg });
+    } finally {
+      setBackfillBaselinesBusy(false);
     }
   };
 
@@ -810,7 +831,7 @@ export function AdminProducts() {
                 <DropdownMenuItem onClick={() => openEdit(p)}>Edit</DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => void onDelete(p._id)}
+                  onClick={() => requestDeleteProduct(p._id)}
                 >
                   <Trash2 className="text-destructive" />
                   Delete
@@ -823,7 +844,7 @@ export function AdminProducts() {
         enableSorting: false,
       },
     ],
-    [categoryNameById, openEdit, onDelete],
+    [categoryNameById, openEdit, requestDeleteProduct],
   );
 
   const table = useReactTable({
@@ -882,6 +903,17 @@ export function AdminProducts() {
           <Button type="button" variant="secondary" onClick={() => setBulkAddOpen(true)} className="shrink-0">
             <Plus className="size-4" />
             Bulk add
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={backfillBaselinesBusy}
+            onClick={() => void onBackfillStockBaselines()}
+            className="shrink-0"
+            title="For legacy products missing a baseline: set initial stock to current stock so the storefront progress bar can shrink as you sell down."
+          >
+            <RefreshCw className={backfillBaselinesBusy ? "size-4 animate-spin" : "size-4"} />
+            Backfill stock baselines
           </Button>
         </div>
       </div>
@@ -983,7 +1015,7 @@ export function AdminProducts() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => void onBulkDelete()}
+                onClick={() => setDeletePrompt({ kind: "bulk" })}
               >
                 <Trash2 className="text-destructive" />
                 Delete selected
@@ -1236,20 +1268,29 @@ export function AdminProducts() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
             <Button type="button" variant="outline" onClick={() => setDetailProduct(null)}>
               Close
             </Button>
             {detailProduct ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  openEdit(detailProduct);
-                  setDetailProduct(null);
-                }}
-              >
-                Edit
-              </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => requestDeleteProduct(detailProduct._id)}
+                >
+                  Delete
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    openEdit(detailProduct);
+                    setDetailProduct(null);
+                  }}
+                >
+                  Edit
+                </Button>
+              </div>
             ) : null}
           </DialogFooter>
         </DialogContent>
@@ -1448,7 +1489,8 @@ export function AdminProducts() {
                   placeholder="(optional)"
                 />
                 <p className="text-muted-foreground text-xs">
-                  Used for the storefront stock progress bar. Leave blank to auto-set.
+                  Used for the storefront stock progress bar. Leave blank on create to use current stock. For older
+                  products, use &quot;Backfill stock baselines&quot; on the products list.
                 </p>
               </div>
             </div>
@@ -1570,6 +1612,41 @@ export function AdminProducts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AdminConfirmDeleteDialog
+        open={deletePrompt !== null}
+        onOpenChange={(o) => !o && setDeletePrompt(null)}
+        title={
+          deletePrompt?.kind === "bulk"
+            ? `Delete ${selectedProductIds.length} product(s)?`
+            : "Delete this product?"
+        }
+        description={
+          deletePrompt?.kind === "bulk"
+            ? `This will permanently remove ${selectedProductIds.length} product(s) and related data. This cannot be undone.`
+            : "This will permanently remove this product and related data. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deletePrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deletePrompt.kind === "single") {
+              const id = deletePrompt.id;
+              await removeMut({ sessionToken, productId: id });
+              setDetailProduct((d) => (d?._id === id ? null : d));
+            } else {
+              await bulkRemoveMut({ sessionToken, productIds: selectedProductIds });
+              setRowSelection({});
+              setDetailProduct((d) => (d && selectedProductIds.includes(d._id) ? null : d));
+            }
+          } catch (caught) {
+            setErr(caught instanceof Error ? caught.message : "Delete failed.");
+            throw caught;
+          }
+        }}
+      />
     </div>
   );
 }

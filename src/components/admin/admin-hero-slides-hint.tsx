@@ -1,8 +1,11 @@
+"use client";
+
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { STORE_SETTING } from "@/lib/store-settings-keys";
@@ -34,6 +37,7 @@ export function AdminHeroSlidesHint() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [rowId, setRowId] = useState<Id<"appSettings"> | null>(null);
+  const [clearHeroOpen, setClearHeroOpen] = useState(false);
 
   useEffect(() => {
     if (!rows) {
@@ -53,7 +57,7 @@ export function AdminHeroSlidesHint() {
     try {
       if (value.trim() === "") {
         if (rowId) {
-          await removeMut({ sessionToken, settingId: rowId });
+          setClearHeroOpen(true);
         }
         return;
       }
@@ -84,8 +88,9 @@ export function AdminHeroSlidesHint() {
         URLs, or a path like <code className="font-mono text-xs">/hero.jpg</code> (files in{" "}
         <code className="font-mono text-xs">public/</code>). Optional <code className="font-mono text-xs">href</code> +{" "}
         <code className="font-mono text-xs">ctaLabel</code> for a button. After your slides, the storefront appends{" "}
-        <strong>newest active products that have an image</strong> until the carousel reaches eight slides total. Add
-        app setting <code className="font-mono text-xs">hero_category_slug</code> (a category{" "}
+        <strong>oldest-first active products that have an image</strong> until the carousel reaches five slides total
+        (entries in your JSON array always come first, in order). Add app setting{" "}
+        <code className="font-mono text-xs">hero_category_slug</code> (a category{" "}
         <code className="font-mono text-xs">slug</code>) to only pull products from that category; omit it to use all
         active products.
       </p>
@@ -129,6 +134,28 @@ export function AdminHeroSlidesHint() {
           Clear (product slides only)
         </Button>
       </div>
+
+      <AdminConfirmDeleteDialog
+        open={clearHeroOpen}
+        onOpenChange={setClearHeroOpen}
+        title="Remove hero slides configuration?"
+        description="This deletes the stored hero slides setting. The storefront will use auto-filled product slides only until you save new JSON again. This cannot be undone."
+        confirmLabel="Remove setting"
+        onConfirm={async () => {
+          if (!sessionToken || !rowId) {
+            return;
+          }
+          setErr(null);
+          try {
+            await removeMut({ sessionToken, settingId: rowId });
+            setRowId(null);
+            setValue("");
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Remove failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }

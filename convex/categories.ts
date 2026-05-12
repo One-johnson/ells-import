@@ -35,16 +35,23 @@ export const list = query({
 });
 
 export const listWithThumbnails = query({
-  args: { parentId: v.optional(v.id("categories")), limit: v.optional(v.number()) },
-  handler: async (ctx, { parentId, limit }) => {
+  args: {
+    parentId: v.optional(v.id("categories")),
+    limit: v.optional(v.number()),
+    /** When true, return every category (root + nested) for carousels; ignores `parentId`. */
+    includeAll: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { parentId, limit, includeAll }) => {
     const all = await ctx.db.query("categories").collect();
-    const filtered = all
-      .filter((c) => {
-        if (parentId === undefined) {
-          return c.parentId === undefined;
-        }
-        return c.parentId === parentId;
-      })
+    const filtered = (includeAll === true
+      ? [...all]
+      : all.filter((c) => {
+          if (parentId === undefined) {
+            return c.parentId === undefined;
+          }
+          return c.parentId === parentId;
+        })
+    )
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
       .slice(0, Math.max(1, Math.min(200, limit ?? 32)));
 

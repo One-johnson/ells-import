@@ -173,17 +173,18 @@ export const heroSlides = query({
 
     let productRows;
     if (categoryId !== undefined) {
-      const rows = await ctx.db
+      productRows = await ctx.db
         .query("products")
-        .withIndex("by_category", (q) => q.eq("categoryId", categoryId))
-        .order("desc")
+        .withIndex("by_category_and_status_and_createdAt", (q) =>
+          q.eq("categoryId", categoryId).eq("status", "active"),
+        )
+        .order("asc")
         .take(64);
-      productRows = rows.filter((p) => p.status === "active");
     } else {
       productRows = await ctx.db
         .query("products")
-        .withIndex("by_status", (q) => q.eq("status", "active"))
-        .order("desc")
+        .withIndex("by_status_and_createdAt", (q) => q.eq("status", "active"))
+        .order("asc")
         .take(48);
     }
 
@@ -248,6 +249,17 @@ export const removeApp = mutation({
   handler: async (ctx, { sessionToken, settingId }) => {
     await requireAdmin(ctx, sessionToken);
     await ctx.db.delete(settingId);
+  },
+});
+
+export const bulkRemoveApp = mutation({
+  args: { sessionToken: v.string(), settingIds: v.array(v.id("appSettings")) },
+  handler: async (ctx, { sessionToken, settingIds }) => {
+    await requireAdmin(ctx, sessionToken);
+    for (const id of settingIds) {
+      await ctx.db.delete(id);
+    }
+    return { removed: settingIds.length };
   },
 });
 

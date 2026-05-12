@@ -76,6 +76,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { orderStatusLabel, paymentMethodLabel, paymentStatusLabel } from "@/components/admin/labels";
 import { shouldIgnoreRowOpenDetails } from "@/lib/admin-table-row-details";
 import { formatCents } from "@/lib/money";
@@ -197,6 +198,9 @@ export function AdminUsers() {
   const [err, setErr] = useState<string | null>(null);
   const [detailUser, setDetailUser] = useState<AdminUserRow | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<Id<"orders"> | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<
+    null | { kind: "single"; user: AdminUserRow } | { kind: "bulk" }
+  >(null);
 
   const users = useQuery(
     api.users.list,
@@ -290,31 +294,15 @@ export function AdminUsers() {
     [sessionToken, setRoleMut],
   );
 
-  const onDelete = useCallback(
-    async (u: AdminUserRow) => {
-      if (!sessionToken) {
-        return;
-      }
+  const requestDeleteUser = useCallback(
+    (u: AdminUserRow) => {
       if (u._id === me?._id) {
         setErr("You cannot delete your own account from here.");
         return;
       }
-      if (!window.confirm(`Delete user ${u.email}?`)) {
-        return;
-      }
-      setErr(null);
-      try {
-        await removeMut({ sessionToken, userId: u._id });
-        setRowSelection((prev) => {
-          const p = { ...prev };
-          delete p[u._id as string];
-          return p;
-        });
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Delete failed.");
-      }
+      setDeletePrompt({ kind: "single", user: u });
     },
-    [sessionToken, me?._id, removeMut],
+    [me?._id],
   );
 
   const selectedUserIds = useMemo((): Id<"users">[] => {
@@ -331,22 +319,6 @@ export function AdminUsers() {
       setRowSelection({});
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Bulk update failed.");
-    }
-  };
-
-  const onBulkDelete = async () => {
-    if (!sessionToken || selectedUserIds.length === 0) {
-      return;
-    }
-    if (!window.confirm(`Delete ${selectedUserIds.length} user(s)?`)) {
-      return;
-    }
-    setErr(null);
-    try {
-      await bulkRemoveMut({ sessionToken, userIds: selectedUserIds });
-      setRowSelection({});
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Bulk delete failed.");
     }
   };
 
@@ -527,7 +499,7 @@ export function AdminUsers() {
               <DropdownMenuContent align="end" className="w-40">
                 <DropdownMenuItem
                   className="text-destructive"
-                  onClick={() => void onDelete(u)}
+                  onClick={() => requestDeleteUser(u)}
                 >
                   <Trash2 className="text-destructive" />
                   Delete
@@ -540,7 +512,7 @@ export function AdminUsers() {
         enableSorting: false,
       },
     ],
-    [me?._id, onDelete, onSetRole],
+    [me?._id, requestDeleteUser, onSetRole],
   );
 
   const table = useReactTable({
@@ -687,7 +659,7 @@ export function AdminUsers() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => void onBulkDelete()}
+                onClick={() => setDeletePrompt({ kind: "bulk" })}
               >
                 <Trash2 className="text-destructive" />
                 Delete selected
@@ -1000,12 +972,22 @@ export function AdminUsers() {
               ) : null}
             </div>
           )}
-          <DrawerFooter className="border-border shrink-0 border-t">
+          <DrawerFooter className="border-border flex shrink-0 flex-col-reverse gap-2 border-t sm:flex-row sm:items-center sm:justify-between">
             <DrawerClose asChild>
               <Button type="button" variant="outline" className="w-full sm:w-auto">
                 Close
               </Button>
             </DrawerClose>
+            {detailUser && detailUser._id !== me?._id ? (
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full sm:w-auto"
+                onClick={() => requestDeleteUser(detailUser)}
+              >
+                Delete user
+              </Button>
+            ) : null}
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -1077,6 +1059,52 @@ export function AdminUsers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AdminConfirmDeleteDialog
+        open={deletePrompt !== null}
+        onOpenChange={(o) => !o && setDeletePrompt(null)}
+        title={
+          deletePrompt?.kind === "bulk"
+            ? `Delete ${selectedUserIds.length} user(s)?`
+            : deletePrompt?.kind === "single"
+              ? `Delete user ${deletePrompt.user.email}?`
+              : "Delete user?"
+        }
+        description={
+          deletePrompt?.kind === "bulk"
+            ? "This will permanently remove the selected accounts. Your own account is skipped if it was selected. This cannot be undone."
+            : "This will permanently remove this account and related data where the server allows. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deletePrompt) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deletePrompt.kind === "single") {
+              await removeMut({ sessionToken, userId: deletePrompt.user._id });
+              setRowSelection((prev) => {
+                const p = { ...prev };
+                delete p[deletePrompt.user._id as string];
+                return p;
+              });
+              setDetailUser((d) => (d?._id === deletePrompt.user._id ? null : d));
+            } else {
+              const ids = selectedUserIds.filter((id) => id !== me?._id);
+              if (ids.length === 0) {
+                setErr("Cannot delete: selection only includes your own account.");
+                throw new Error("No deletable users");
+              }
+              await bulkRemoveMut({ sessionToken, userIds: ids });
+              setRowSelection({});
+              setDetailUser((d) => (d && ids.includes(d._id) ? null : d));
+            }
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Delete failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }

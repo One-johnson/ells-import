@@ -191,6 +191,23 @@ export const remove = mutation({
   },
 });
 
+export const bulkRemove = mutation({
+  args: { sessionToken: v.string(), conversationIds: v.array(v.id("conversations")) },
+  handler: async (ctx, { sessionToken, conversationIds }) => {
+    await requireAdmin(ctx, sessionToken);
+    for (const conversationId of conversationIds) {
+      for (const m of await ctx.db
+        .query("messages")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversationId))
+        .collect()) {
+        await ctx.db.delete(m._id);
+      }
+      await ctx.db.delete(conversationId);
+    }
+    return { removed: conversationIds.length };
+  },
+});
+
 export const bulkSetStatus = mutation({
   args: {
     sessionToken: v.string(),

@@ -6,9 +6,11 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 
+import { AdminConfirmDeleteDialog } from "@/components/admin/admin-confirm-delete-dialog";
 import { conversationStatusLabel, conversationTypeLabel } from "@/components/admin/labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -28,6 +30,10 @@ export function AdminSupport() {
   const [selectedId, setSelectedId] = useState<Id<"conversations"> | null>(null);
   const [body, setBody] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [convSelection, setConvSelection] = useState<Set<Id<"conversations">>>(() => new Set());
+  const [deleteConvPrompt, setDeleteConvPrompt] = useState<
+    null | { kind: "single"; conversationId: Id<"conversations"> } | { kind: "bulk" }
+  >(null);
 
   const rows = useQuery(
     api.conversations.adminListWithDetails,
@@ -54,6 +60,8 @@ export function AdminSupport() {
 
   const postMut = useMutation(api.messages.post);
   const updateConvMut = useMutation(api.conversations.update);
+  const removeConvMut = useMutation(api.conversations.remove);
+  const bulkRemoveConvMut = useMutation(api.conversations.bulkRemove);
 
   const selectedRow = useMemo(
     () => rows?.find((r) => r.conversation._id === selectedId),
@@ -130,6 +138,7 @@ export function AdminSupport() {
           onValueChange={(v) => {
             setStatusFilter(v as typeof statusFilter);
             setSelectedId(null);
+            setConvSelection(new Set());
           }}
         >
           <SelectTrigger className="w-full sm:w-48">
@@ -156,6 +165,20 @@ export function AdminSupport() {
         )}
       </div>
 
+      {convSelection.size > 0 && (
+        <div className="bg-muted/40 flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium">{convSelection.size} thread(s) selected</span>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setConvSelection(new Set())}>
+              Clear selection
+            </Button>
+            <Button type="button" size="sm" variant="destructive" onClick={() => setDeleteConvPrompt({ kind: "bulk" })}>
+              Delete selected threads
+            </Button>
+          </div>
+        </div>
+      )}
+
       {rows === undefined ? (
         <p className="text-muted-foreground text-sm">Loading…</p>
       ) : rows.length === 0 ? (
@@ -169,14 +192,35 @@ export function AdminSupport() {
                   const c = r.conversation;
                   const active = c._id === selectedId;
                   return (
-                    <li key={c._id}>
+                    <li key={c._id} className="flex">
+                      <div
+                        className="flex shrink-0 items-start pt-3 pl-2"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={convSelection.has(c._id)}
+                          onCheckedChange={(v) => {
+                            setConvSelection((prev) => {
+                              const n = new Set(prev);
+                              if (v) {
+                                n.add(c._id);
+                              } else {
+                                n.delete(c._id);
+                              }
+                              return n;
+                            });
+                          }}
+                          aria-label={`Select thread ${c.subject}`}
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={() => setSelectedId(c._id)}
                         className={
                           active
-                            ? "bg-primary/5 hover:bg-primary/8 w-full px-3 py-3 text-left text-sm"
-                            : "hover:bg-muted/50 w-full px-3 py-3 text-left text-sm"
+                            ? "bg-primary/5 hover:bg-primary/8 min-w-0 flex-1 px-3 py-3 text-left text-sm"
+                            : "hover:bg-muted/50 min-w-0 flex-1 px-3 py-3 text-left text-sm"
                         }
                       >
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -247,6 +291,16 @@ export function AdminSupport() {
                   <Button variant="outline" size="sm" asChild>
                     <Link href="/admin/users">Users</Link>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() =>
+                      setDeleteConvPrompt({ kind: "single", conversationId: selectedRow.conversation._id })
+                    }
+                  >
+                    Delete thread
+                  </Button>
                 </div>
                 <ScrollArea className="min-h-[200px] flex-1 p-3">
                   <ul className="space-y-3">
@@ -302,6 +356,58 @@ export function AdminSupport() {
           </div>
         </div>
       )}
+
+      <AdminConfirmDeleteDialog
+        open={deleteConvPrompt !== null}
+        onOpenChange={(o) => !o && setDeleteConvPrompt(null)}
+        title={
+          deleteConvPrompt?.kind === "bulk"
+            ? `Delete ${convSelection.size} support thread(s)?`
+            : "Delete this support thread?"
+        }
+        description={
+          deleteConvPrompt?.kind === "bulk"
+            ? "This will permanently remove the selected conversations and all of their messages. This cannot be undone."
+            : "This will permanently remove this conversation and all of its messages. This cannot be undone."
+        }
+        onConfirm={async () => {
+          if (!sessionToken || !deleteConvPrompt || !rows) {
+            return;
+          }
+          setErr(null);
+          try {
+            if (deleteConvPrompt.kind === "single") {
+              const conversationId = deleteConvPrompt.conversationId;
+              await removeConvMut({ sessionToken, conversationId });
+              setConvSelection((prev) => {
+                const n = new Set(prev);
+                n.delete(conversationId);
+                return n;
+              });
+              const nextId =
+                rows
+                  .map((x) => x.conversation._id)
+                  .find((id) => id !== conversationId) ?? null;
+              setSelectedId((cur) => (cur === conversationId ? nextId : cur));
+            } else {
+              const conversationIds = [...convSelection];
+              await bulkRemoveConvMut({ sessionToken, conversationIds });
+              const idSet = new Set(conversationIds);
+              setConvSelection(new Set());
+              setSelectedId((cur) => {
+                if (cur && idSet.has(cur)) {
+                  const next = rows.find((x) => !idSet.has(x.conversation._id))?.conversation._id;
+                  return next ?? null;
+                }
+                return cur;
+              });
+            }
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : "Delete failed.");
+            throw e;
+          }
+        }}
+      />
     </div>
   );
 }
