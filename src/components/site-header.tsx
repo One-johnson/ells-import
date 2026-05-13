@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { X } from "lucide-react";
 
+import { AppBrandLogoImage } from "@/components/app-brand-logo";
 import { GlobalSearch } from "@/components/global-search";
 import { HeaderCart } from "@/components/header-cart";
 import { HeaderNotifications } from "@/components/header-notifications";
@@ -68,8 +69,8 @@ export function SiteHeader() {
       )}
       <div className="mx-auto w-full max-w-6xl px-3 py-2 sm:px-4 sm:py-0">
         {/* Mobile top bar: notifications far-left, brand centered, avatar stays right */}
-        <div className="relative flex items-center justify-between gap-2 md:hidden">
-          <div className="flex shrink-0 items-center">
+        <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-1 md:hidden">
+          <div className="flex shrink-0 justify-start">
             {isLoading ? (
               <span className="text-muted-foreground px-2 text-xs">…</span>
             ) : isAuthenticated && user && sessionToken ? (
@@ -79,13 +80,24 @@ export function SiteHeader() {
             )}
           </div>
 
-          <Link
-            href="/"
-            aria-label="Home"
-            className="text-foreground absolute left-1/2 -translate-x-1/2 text-sm font-semibold tracking-tight"
-          >
-            {brand ? brand : storefront === undefined ? "…" : <span className="sr-only">Home</span>}
-          </Link>
+          <div className="flex min-w-0 justify-center px-1">
+            <Link
+              href="/"
+              aria-label="Home"
+              className="text-foreground flex max-w-full flex-col items-center gap-1.5"
+            >
+              <AppBrandLogoImage size={56} />
+              {brand ? (
+                <span className="w-full truncate text-center text-xs font-semibold leading-none tracking-tight">
+                  {brand}
+                </span>
+              ) : storefront === undefined ? (
+                <span className="text-muted-foreground text-xs leading-none">…</span>
+              ) : (
+                <span className="sr-only">Home</span>
+              )}
+            </Link>
+          </div>
 
           <nav className="flex shrink-0 items-center gap-1">
             <HeaderCart />
@@ -102,8 +114,15 @@ export function SiteHeader() {
         {/* Desktop / tablet header */}
         <div className="hidden w-full items-center gap-x-2 gap-y-2 md:flex md:flex-wrap md:py-0 md:min-h-14 md:gap-3">
           <div className="flex min-w-0 shrink-0 items-center gap-3">
-            <Link href="/" className="text-foreground text-sm font-semibold tracking-tight" aria-label="Home">
-              {brand || <span className="sr-only">Home</span>}
+            <Link
+              href="/"
+              className="text-foreground flex min-w-0 max-w-[min(100%,16rem)] items-center gap-3 sm:max-w-xs"
+              aria-label="Home"
+            >
+              <AppBrandLogoImage size={56} priority />
+              <span className="truncate text-sm font-semibold tracking-tight">
+                {brand || <span className="sr-only">Home</span>}
+              </span>
             </Link>
             <Link
               href="/shop"
