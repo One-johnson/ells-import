@@ -33,6 +33,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import { AccountInstallAppCard } from "@/components/account-install-app-card";
 import { AccountPageSkeleton } from "@/components/account/account-page-skeleton";
 import { userInitials } from "@/lib/user-display";
 import { useAuth } from "@/providers/auth-provider";
@@ -51,7 +52,7 @@ export default function AccountPage() {
   const storeName = settings?.storeName?.trim() || DEFAULT_STORE_NAME;
 
   useEffect(() => {
-    setShareOrigin(window.location.origin);
+    queueMicrotask(() => setShareOrigin(window.location.origin));
   }, []);
 
   const shareUrl = shareOrigin ? `${shareOrigin}/` : "";
@@ -240,6 +241,8 @@ export default function AccountPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AccountInstallAppCard />
 
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" asChild>

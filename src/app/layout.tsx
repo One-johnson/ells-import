@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { InstallAppBanner } from "@/components/install-app-banner";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SiteHeaderClient } from "@/components/site-header-client";
 import { SiteFooter } from "@/components/site-footer";
 import { StorefrontMain } from "@/components/storefront-main";
+import { SITE_ICON_192_CACHED, SITE_ICON_512_CACHED } from "@/lib/site-icons";
 import { AuthProvider } from "@/providers/auth-provider";
 import { GuestCartProvider } from "@/providers/guest-cart-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -31,10 +33,10 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: SITE_ICON_192_CACHED, sizes: "192x192", type: "image/png" },
+      { url: SITE_ICON_512_CACHED, sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: SITE_ICON_192_CACHED, sizes: "192x192", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,
@@ -80,6 +82,7 @@ export default function RootLayout({
                   <StorefrontMain>{children}</StorefrontMain>
                   <SiteFooter />
                   <MobileBottomNav />
+                  <InstallAppBanner />
                   <Toaster position="top-center" richColors closeButton />
                 </div>
               </GuestCartProvider>
