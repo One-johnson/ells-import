@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Bell, CheckCheck, Loader2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,7 @@ function formatTime(createdAt: number) {
 
 export function HeaderNotifications({ sessionToken }: HeaderNotificationsProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [marking, setMarking] = useState(false);
@@ -59,6 +60,10 @@ export function HeaderNotifications({ sessionToken }: HeaderNotificationsProps) 
   const unreadCount = unread?.length ?? 0;
   const hasUnread = unreadCount > 0;
   const loading = list === undefined;
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   const onOpenNotification = async (n: NonNullable<typeof list>[number]) => {
     if (!n.read) {
@@ -129,7 +134,13 @@ export function HeaderNotifications({ sessionToken }: HeaderNotificationsProps) 
   }
 
   return (
-    <Drawer open={open} onOpenChange={setOpen} direction="right" shouldScaleBackground={false}>
+    <Drawer
+      open={open}
+      onOpenChange={setOpen}
+      direction="right"
+      shouldScaleBackground={false}
+      modal={false}
+    >
       <Button
         type="button"
         variant="ghost"

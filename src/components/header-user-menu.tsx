@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useUserAvatarUrl } from "@/hooks/use-user-avatar-url";
 import { userInitials } from "@/lib/user-display";
 import { useAuth } from "@/providers/auth-provider";
 import type { PublicUser } from "@convex/lib/publicUser";
@@ -43,13 +44,14 @@ export function HeaderUserMenu({ user, isAdmin }: HeaderUserMenuProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const fallback = userInitials(user.name, user.email);
+  const avatarSrc = useUserAvatarUrl(user);
   const currentTheme = (theme ?? "system") as "light" | "dark" | "system";
   const accountAriaLabel = `Account (${user.name || user.email})`;
 
   const renderAvatar = () => (
     <Avatar className="size-8">
-      {user.image ? (
-        <AvatarImage src={user.image} alt="" className="object-cover" />
+      {avatarSrc ? (
+        <AvatarImage src={avatarSrc} alt="" className="object-cover" />
       ) : null}
       <AvatarFallback className="text-xs">{fallback}</AvatarFallback>
     </Avatar>

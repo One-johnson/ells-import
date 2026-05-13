@@ -97,10 +97,12 @@ export const update = mutation({
     userId: v.id("users"),
     email: v.optional(v.string()),
     name: v.optional(v.string()),
-    image: v.optional(v.string()),
+    image: v.optional(v.union(v.string(), v.null())),
+    /** Set a new uploaded avatar, clear it with `null`, or omit to leave unchanged. */
+    profileImageId: v.optional(v.union(v.id("_storage"), v.null())),
     emailVerified: v.optional(v.boolean()),
   },
-  handler: async (ctx, { sessionToken, userId, email, name, image, emailVerified }) => {
+  handler: async (ctx, { sessionToken, userId, email, name, image, profileImageId, emailVerified }) => {
     const a = await requireAuthed(ctx, sessionToken);
     if (a.userId !== userId && a.user.role !== "admin") {
       throw new Error("Forbidden");
@@ -121,10 +123,31 @@ export const update = mutation({
       patch.email = normalized;
     }
     if (name !== undefined) {
-      patch.name = name;
+      const t = name.trim();
+      patch.name = t.length > 0 ? t : undefined;
     }
     if (image !== undefined) {
-      patch.image = image;
+      if (image === null) {
+        patch.image = undefined;
+      } else {
+        const t = image.trim();
+        patch.image = t.length > 0 ? t : undefined;
+      }
+    }
+    if (profileImageId !== undefined) {
+      const row = await ctx.db.get(userId);
+      if (profileImageId === null) {
+        if (row?.profileImageId) {
+          await ctx.storage.delete(row.profileImageId);
+        }
+        patch.profileImageId = undefined;
+      } else {
+        if (row?.profileImageId && row.profileImageId !== profileImageId) {
+          await ctx.storage.delete(row.profileImageId);
+        }
+        patch.profileImageId = profileImageId;
+        patch.image = undefined;
+      }
     }
     if (emailVerified !== undefined && a.user.role === "admin") {
       patch.emailVerified = emailVerified;

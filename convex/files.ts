@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin } from "./lib/sessionAuth";
+import { requireAdmin, requireAuthed } from "./lib/sessionAuth";
 
 /** Public upload URL for optional profile photo during registration (no session yet). */
 export const generateRegistrationUploadUrl = mutation({
@@ -22,6 +22,15 @@ export const generateUploadUrl = mutation({
   args: { sessionToken: v.string() },
   handler: async (ctx, { sessionToken }) => {
     await requireAdmin(ctx, sessionToken);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Signed-in customer or admin: upload a new profile photo to attach via `users.update`. */
+export const generateProfileUploadUrl = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    await requireAuthed(ctx, sessionToken);
     return await ctx.storage.generateUploadUrl();
   },
 });
