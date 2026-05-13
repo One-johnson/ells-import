@@ -17,8 +17,8 @@ export function StorefrontMain({ children }: { children: ReactNode }) {
       className={cn(
         "min-h-0 w-full min-w-0 flex-1 print:min-h-0 print:pt-0",
         hasAnnouncement
-          ? "pt-[calc(9.25rem+env(safe-area-inset-top,0px))] sm:pt-[calc(5.5rem+env(safe-area-inset-top,0px))]"
-          : "pt-[calc(7rem+env(safe-area-inset-top,0px))] sm:pt-[calc(3.5rem+env(safe-area-inset-top,0px))]",
+          ? "pt-[calc(10.75rem+env(safe-area-inset-top,0px))] sm:pt-[calc(5.5rem+env(safe-area-inset-top,0px))]"
+          : "pt-[calc(9rem+env(safe-area-inset-top,0px))] sm:pt-[calc(3.5rem+env(safe-area-inset-top,0px))]",
       )}
     >
       {children}
