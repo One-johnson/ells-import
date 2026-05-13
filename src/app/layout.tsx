@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { InstallAppBanner } from "@/components/install-app-banner";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { SiteHeaderClient } from "@/components/site-header-client";
 import { SiteFooter } from "@/components/site-footer";
@@ -80,6 +81,7 @@ export default function RootLayout({
                   <StorefrontMain>{children}</StorefrontMain>
                   <SiteFooter />
                   <MobileBottomNav />
+                  <InstallAppBanner />
                   <Toaster position="top-center" richColors closeButton />
                 </div>
               </GuestCartProvider>
