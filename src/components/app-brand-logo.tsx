@@ -7,6 +7,7 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { cn } from "@/lib/utils";
 
+/** Same URL as `SITE_ICON_192_PLAIN` in `@/lib/site-icons` (inlined so the client bundle never misses the export). */
 export const APP_LOGO_SRC = "/icons/icon-192.png";
 
 type AppBrandLogoImageProps = {
