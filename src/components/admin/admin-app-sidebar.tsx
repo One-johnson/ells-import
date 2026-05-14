@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BellRing,
+  Calendar,
   CreditCard,
   FolderTree,
   LayoutDashboard,
@@ -39,6 +40,7 @@ const nav = [
   { href: "/admin/products", label: "Products", icon: Package, exact: false },
   { href: "/admin/categories", label: "Categories", icon: FolderTree, exact: false },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart, exact: false },
+  { href: "/admin/preorders", label: "Pre-order rounds", icon: Calendar, exact: false },
   { href: "/admin/payments", label: "Payments", icon: CreditCard, exact: false },
   { href: "/admin/support", label: "Support", icon: MessageSquare, exact: false },
   { href: "/admin/reviews", label: "Reviews", icon: Star, exact: false },

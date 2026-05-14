@@ -66,6 +66,33 @@ export const paymentMethod = v.union(
   v.literal("other"),
 );
 
+/** In-stock vs monthly pre-order (China → Ghana). */
+export const fulfillmentMode = v.union(v.literal("in_stock"), v.literal("preorder"));
+
+export const preorderRoundStatus = v.union(
+  v.literal("open"),
+  v.literal("closed"),
+  v.literal("ordered"),
+  v.literal("in_transit"),
+  v.literal("arrived"),
+  v.literal("fulfilled"),
+  v.literal("cancelled"),
+);
+
+export const preorderStage = v.union(
+  v.literal("awaiting_item_payment"),
+  v.literal("awaiting_round_close"),
+  v.literal("round_closed"),
+  v.literal("supplier_ordered"),
+  v.literal("in_transit"),
+  v.literal("arrived_gh"),
+  v.literal("shipping_billed"),
+  v.literal("shipping_paid"),
+  v.literal("completed"),
+);
+
+export const paymentKind = v.union(v.literal("full"), v.literal("items"), v.literal("shipping"));
+
 export default defineSchema({
   users: defineTable({
     email: v.string(),
@@ -94,6 +121,28 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_user", ["userId"]),
+
+  /**
+   * Monthly pre-order batch (closes 23:59:59.999 UTC on the 28th of `monthKey` month).
+   */
+  preorderRounds: defineTable({
+    label: v.string(),
+    /** Calendar month, e.g. "2026-05". */
+    monthKey: v.string(),
+    status: preorderRoundStatus,
+    closesAt: v.number(),
+    closedAt: v.optional(v.number()),
+    closedByUserId: v.optional(v.id("users")),
+    closedReason: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    supplierOrderedAt: v.optional(v.number()),
+    arrivedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_monthKey", ["monthKey"])
+    .index("by_status", ["status"])
+    .index("by_status_and_monthKey", ["status", "monthKey"]),
 
   categories: defineTable({
     name: v.string(),
@@ -129,6 +178,10 @@ export default defineSchema({
     inStock: v.optional(v.boolean()),
     categoryId: v.optional(v.id("categories")),
     publicCode: v.optional(v.string()),
+    fulfillmentMode: v.optional(fulfillmentMode),
+    preorderRoundId: v.optional(v.id("preorderRounds")),
+    /** Cubic metres per sellable unit (CBM-based shipping after arrival). */
+    cbmPerUnit: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -172,6 +225,14 @@ export default defineSchema({
     publicCode: v.optional(v.string()),
     /** Unique 6-digit invoice number; assigned when order is paid/shipped/delivered (approved). */
     invoiceNumber: v.optional(v.string()),
+    fulfillmentMode: v.optional(fulfillmentMode),
+    preorderRoundId: v.optional(v.id("preorderRounds")),
+    preorderStage: v.optional(preorderStage),
+    /** When shipping fee was calculated and billed (pre-order second payment). */
+    shippingInvoicedAt: v.optional(v.number()),
+    shippingPaidAt: v.optional(v.number()),
+    shippingReminderLastAt: v.optional(v.number()),
+    shippingReminderCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -179,7 +240,8 @@ export default defineSchema({
     .index("by_user_created", ["userId", "createdAt"])
     .index("by_status", ["status"])
     .index("by_public_code", ["publicCode"])
-    .index("by_invoice_number", ["invoiceNumber"]),
+    .index("by_invoice_number", ["invoiceNumber"])
+    .index("by_preorder_round", ["preorderRoundId"]),
 
   payments: defineTable({
     publicCode: v.string(),
@@ -189,6 +251,8 @@ export default defineSchema({
     currency: v.string(),
     status: paymentStatus,
     method: paymentMethod,
+    /** `full` legacy single payment; pre-orders use `items` then `shipping`. */
+    kind: v.optional(paymentKind),
     note: v.optional(v.string()),
     createdAt: v.number(),
   })
@@ -206,6 +270,8 @@ export default defineSchema({
     unitCostCents: v.optional(v.number()),
     quantity: v.number(),
     imageUrl: v.optional(v.string()),
+    /** Total CBM for this line at checkout (cbmPerUnit × qty). */
+    lineCbm: v.optional(v.number()),
   }).index("by_order", ["orderId"]),
 
   carts: defineTable({

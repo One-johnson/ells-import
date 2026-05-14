@@ -12,12 +12,42 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { AccountPageSkeleton } from "@/components/account/account-page-skeleton";
+import { WishlistPageSkeleton } from "@/components/storefront/wishlist-page-skeleton";
 import { formatPrice } from "@/lib/formatPrice";
 import { publicRef } from "@/lib/public-ref";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { toast } from "sonner";
+
+function WishlistSectionLabel({ id, children }: { id?: string; children: React.ReactNode }) {
+  return (
+    <p
+      id={id}
+      className="text-muted-foreground scroll-mt-6 text-xs font-semibold tracking-wide uppercase"
+    >
+      {children}
+    </p>
+  );
+}
+
+function WishlistEmptyState() {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="flex flex-col items-center px-6 py-14 text-center">
+        <div className="bg-muted mb-5 flex size-14 items-center justify-center rounded-full">
+          <Heart className="text-muted-foreground size-7 stroke-[1.25]" aria-hidden />
+        </div>
+        <h2 className="text-foreground text-lg font-semibold tracking-tight">Nothing saved yet</h2>
+        <p className="text-muted-foreground mt-2 max-w-sm text-sm leading-relaxed">
+          Tap the heart on a product to save it here. Come back anytime to add favorites to your cart.
+        </p>
+        <Button className="mt-8" asChild>
+          <Link href="/shop">Browse the shop</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function WishlistContent() {
   const { isLoading, isAuthenticated, sessionToken } = useAuth();
@@ -73,35 +103,21 @@ export function WishlistContent() {
   );
 
   if (isLoading || !isAuthenticated) {
-    return <AccountPageSkeleton />;
+    return <WishlistPageSkeleton />;
   }
 
   if (rows === undefined) {
-    return <AccountPageSkeleton />;
+    return <WishlistPageSkeleton />;
   }
 
   if (rows.length === 0) {
-    return (
-      <Card className="border-dashed shadow-none">
-        <CardContent className="flex flex-col items-center px-4 py-12 text-center sm:px-6 sm:py-14">
-          <div className="bg-muted/80 mb-5 flex size-16 items-center justify-center rounded-full">
-            <Heart className="text-muted-foreground size-8 stroke-[1.25]" aria-hidden />
-          </div>
-          <h2 className="text-foreground text-lg font-semibold tracking-tight">Nothing saved yet</h2>
-          <p className="text-muted-foreground mt-2 max-w-sm text-sm leading-relaxed">
-            Tap the heart on a product to save it here. Come back anytime to add favorites to your cart.
-          </p>
-          <Button className="mt-8" asChild>
-            <Link href="/shop">Browse the shop</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
+    return <WishlistEmptyState />;
   }
 
   return (
-    <div className="space-y-3 sm:space-y-4">
-      <p className="text-muted-foreground text-xs tabular-nums sm:text-sm">
+    <section aria-labelledby="wishlist-saved-heading" className="space-y-3 sm:space-y-4">
+      <WishlistSectionLabel id="wishlist-saved-heading">Saved items</WishlistSectionLabel>
+      <p className="text-muted-foreground text-sm tabular-nums">
         {rows.length} saved {rows.length === 1 ? "item" : "items"}
       </p>
       <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-5" role="list">
@@ -116,7 +132,7 @@ export function WishlistContent() {
                     "hover:bg-muted/40",
                   )}
                 >
-                  <CardContent className="flex flex-wrap items-center gap-3 p-3 sm:gap-4 sm:p-4 sm:flex-nowrap sm:justify-between">
+                  <CardContent className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap sm:justify-between sm:gap-4 sm:p-4">
                     <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className="bg-muted/80 flex size-11 shrink-0 items-center justify-center rounded-lg border">
                         <PackageX className="text-muted-foreground size-5" aria-hidden />
@@ -157,13 +173,13 @@ export function WishlistContent() {
                 )}
               >
                 <CardContent className="flex flex-1 flex-col p-3 sm:p-5">
-                  <div className="flex flex-1 flex-col gap-3 sm:gap-4 sm:flex-row sm:items-stretch sm:gap-5 lg:flex-col lg:gap-4">
+                  <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-5 lg:flex-col lg:gap-4">
                     <Link
                       href={href}
                       className={cn(
                         "bg-muted/30 border-border group/img relative shrink-0 overflow-hidden rounded-xl border",
                         "aspect-square w-full max-w-[6.25rem] sm:max-w-[8.5rem]",
-                        "lg:max-w-none lg:aspect-[4/3] lg:w-full",
+                        "lg:aspect-[4/3] lg:w-full lg:max-w-none",
                       )}
                       aria-label={`View ${p.name}`}
                     >
@@ -239,6 +255,6 @@ export function WishlistContent() {
           );
         })}
       </ul>
-    </div>
+    </section>
   );
 }

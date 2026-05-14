@@ -47,23 +47,47 @@ export function CheckoutForm() {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  const subtotal = useMemo(() => {
+  const { inStockSub, preorderSub, hasPreorder, hasInStock, currency } = useMemo(() => {
     if (!cart?.items.length) {
-      return { cents: 0, currency: "GHS" };
+      return {
+        inStockSub: 0,
+        preorderSub: 0,
+        hasPreorder: false,
+        hasInStock: false,
+        currency: "GHS" as const,
+      };
     }
-    let t = 0;
+    let i = 0;
+    let p = 0;
+    let hasP = false;
+    let hasI = false;
+    let cur = "GHS";
     for (const line of cart.items) {
-      if (!line.product) {
+      const pr = line.product;
+      if (!pr) {
         continue;
       }
-      t += line.product.priceCents * line.quantity;
+      cur = pr.currency;
+      if (pr.fulfillmentMode === "preorder") {
+        p += pr.priceCents * line.quantity;
+        hasP = true;
+      } else {
+        i += pr.priceCents * line.quantity;
+        hasI = true;
+      }
     }
-    return { cents: t, currency: cart.items[0]?.product?.currency ?? "GHS" };
+    return {
+      inStockSub: i,
+      preorderSub: p,
+      hasPreorder: hasP,
+      hasInStock: hasI,
+      currency: cur,
+    };
   }, [cart?.items]);
 
   const deliveryFeeCents = storefront?.deliveryFeeCents ?? 0;
-  const totalCents = subtotal.cents + deliveryFeeCents;
-  const currency = subtotal.currency;
+  const deliveryApplied = hasInStock ? deliveryFeeCents : 0;
+  const dueAtCheckout = inStockSub + deliveryApplied + preorderSub;
 
   const paystackMode = storefront?.checkoutPaymentChannel === "paystack";
 
@@ -77,7 +101,7 @@ export function CheckoutForm() {
     }
     setPending(true);
     try {
-      const orderId = await checkout({
+      const { orderIds } = await checkout({
         sessionToken,
         shippingAddress: {
           name: name.trim(),
@@ -91,10 +115,17 @@ export function CheckoutForm() {
         },
         orderNotes: orderNotes.trim() || undefined,
       });
-      toast.success("Order created", {
-        description: "Open your order and send the WhatsApp message to pay.",
-      });
-      router.push(`/account/orders/${orderId}`);
+      if (orderIds.length === 1) {
+        toast.success("Order created", {
+          description: "Open your order and send the WhatsApp message to pay.",
+        });
+        router.push(`/account/orders/${orderIds[0]}`);
+      } else {
+        toast.success("Orders created", {
+          description: "In-stock and pre-order were split into two orders. Open Orders to pay each on WhatsApp.",
+        });
+        router.push("/account/orders");
+      }
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Checkout failed");
@@ -356,11 +387,15 @@ export function CheckoutForm() {
                 if (!p) {
                   return null;
                 }
+                const isPre = p.fulfillmentMode === "preorder";
                 return (
                   <li key={line._id} className="flex justify-between gap-3">
                     <span className="text-muted-foreground min-w-0">
                       <span className="text-foreground font-medium">{p.name}</span>
                       <span className="text-foreground/80"> ×{line.quantity}</span>
+                      {isPre ? (
+                        <span className="text-muted-foreground ml-1 text-xs">· Pre-order</span>
+                      ) : null}
                     </span>
                     <span className="shrink-0 font-medium tabular-nums">
                       {formatPrice(p.priceCents * line.quantity, p.currency)}
@@ -371,20 +406,33 @@ export function CheckoutForm() {
             </ul>
           </CardContent>
           <div className="bg-muted/20 space-y-2 border-t px-6 py-4 text-sm">
+            {hasInStock ? (
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">In-stock subtotal</span>
+                <span className="tabular-nums">{formatPrice(inStockSub, currency)}</span>
+              </div>
+            ) : null}
+            {hasPreorder ? (
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Pre-order subtotal</span>
+                <span className="tabular-nums">{formatPrice(preorderSub, currency)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="tabular-nums">{formatPrice(subtotal.cents, currency)}</span>
-            </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-muted-foreground">Delivery</span>
+              <span className="text-muted-foreground">Delivery (in-stock only)</span>
               <span className="tabular-nums">
-                {deliveryFeeCents > 0 ? formatPrice(deliveryFeeCents, currency) : "—"}
+                {deliveryApplied > 0 ? formatPrice(deliveryApplied, currency) : "—"}
               </span>
             </div>
+            {hasPreorder ? (
+              <p className="text-muted-foreground text-xs">
+                Pre-order shipping from China is billed later (CBM) after arrival in Ghana.
+              </p>
+            ) : null}
             <p className="text-muted-foreground text-xs">Tax not included yet.</p>
             <div className="flex justify-between gap-2 border-t pt-2 text-base font-semibold">
-              <span>Total</span>
-              <span className="tabular-nums">{formatPrice(totalCents, currency)}</span>
+              <span>Total due now</span>
+              <span className="tabular-nums">{formatPrice(dueAtCheckout, currency)}</span>
             </div>
           </div>
         </Card>

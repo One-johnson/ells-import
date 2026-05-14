@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Monitor, Moon, Package, Pencil, Share2, Sun, UserPlus } from "lucide-react";
+import { Copy, Monitor, Moon, Package, Pencil, Share2, Sun, UserPlus } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -33,12 +33,13 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { Skeleton } from "@/components/ui/skeleton";
 import { AccountInstallAppCard } from "@/components/account-install-app-card";
 import { AccountProfileEditDrawer } from "@/components/account/account-profile-edit-drawer";
 import { AccountPageSkeleton } from "@/components/account/account-page-skeleton";
 import { useUserAvatarUrl } from "@/hooks/use-user-avatar-url";
 import { isPwaInstallBannerDismissed } from "@/lib/pwa-install";
+import { SITE_ICON_192_CACHED } from "@/lib/site-icons";
+import { getPublicSiteUrl } from "@/lib/site-url";
 import { userInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -61,7 +62,6 @@ export default function AccountPage() {
   const settings = useQuery(api.settings.storefrontSettings);
   const { theme, setTheme } = useTheme();
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const [shareOrigin, setShareOrigin] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [installDismissFootnote, setInstallDismissFootnote] = useState(false);
   const router = useRouter();
@@ -70,20 +70,16 @@ export default function AccountPage() {
   const storeName = settings?.storeName?.trim() || DEFAULT_STORE_NAME;
 
   useEffect(() => {
-    queueMicrotask(() => setShareOrigin(window.location.origin));
-  }, []);
-
-  useEffect(() => {
     queueMicrotask(() => setInstallDismissFootnote(isPwaInstallBannerDismissed()));
   }, []);
 
-  const shareUrl = shareOrigin ? `${shareOrigin}/` : "";
-  const shareMessage = useMemo(() => {
-    if (!shareUrl) {
-      return `Share the joy — ${storeName}`;
-    }
-    return `Share the joy — ${storeName}: ${shareUrl}`;
-  }, [shareUrl, storeName]);
+  const inviteShopUrl = useMemo(() => getPublicSiteUrl(), []);
+
+  const inviteMessage = useMemo(
+    () =>
+      `I've been using ${storeName} for my shopping. It's easy and safe.\n\nGet started here: ${inviteShopUrl}`,
+    [inviteShopUrl, storeName],
+  );
 
   const displayName = user?.name?.trim() || user?.email?.split("@")[0] || "Account";
   const avatarFallback = user ? userInitials(user.name, user.email) : "?";
@@ -98,47 +94,30 @@ export default function AccountPage() {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  async function copyShareLink() {
-    if (!shareUrl) {
-      toast.error("Could not copy — try again in a moment.");
-      return;
-    }
+  async function copyInviteMessage() {
     try {
-      await navigator.clipboard.writeText(shareMessage);
+      await navigator.clipboard.writeText(inviteMessage);
       toast.success("Message copied");
     } catch {
       toast.error("Could not copy to clipboard");
     }
   }
 
-  async function copyShareUrlOnly() {
-    if (!shareUrl) {
-      toast.error("Could not copy — try again in a moment.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success("Link copied");
-    } catch {
-      toast.error("Could not copy to clipboard");
-    }
-  }
-
   async function nativeShare() {
-    if (!shareUrl || typeof navigator === "undefined" || !navigator.share) {
+    if (typeof navigator === "undefined" || !navigator.share) {
       return;
     }
     try {
       await navigator.share({
-        title: `Share the joy · ${storeName}`,
-        text: shareMessage,
-        url: shareUrl,
+        title: `Invite · ${storeName}`,
+        text: inviteMessage,
+        url: inviteShopUrl,
       });
     } catch (e) {
       if ((e as Error).name === "AbortError") {
         return;
       }
-      await copyShareLink();
+      await copyInviteMessage();
     }
   }
 
@@ -151,7 +130,7 @@ export default function AccountPage() {
     : undefined;
 
   return (
-    <div className="from-muted/30 via-background to-background mx-auto max-w-lg space-y-6 bg-gradient-to-b px-4 pb-12 pt-6 md:space-y-8 md:rounded-xl md:py-10">
+    <div className="from-muted/30 via-background to-background mx-auto w-full max-w-lg space-y-6 bg-gradient-to-b px-4 pb-12 pt-6 md:max-w-3xl md:space-y-8 md:rounded-xl md:px-8 md:py-10 lg:max-w-6xl lg:px-10 xl:max-w-7xl">
       <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -182,38 +161,45 @@ export default function AccountPage() {
         />
       ) : null}
 
-      <section aria-labelledby="account-heading" className="space-y-3">
-        <AccountSectionLabel id="account-heading">Account</AccountSectionLabel>
-        <div className="flex flex-col items-center">
-          <button
-            type="button"
-            className="group flex max-w-sm cursor-pointer flex-col items-center rounded-2xl px-4 py-2 text-center outline-none transition hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            aria-label="Edit profile — photo and display name"
-            onClick={() => setProfileOpen(true)}
-          >
-            <Avatar className="border-background size-24 border-4 shadow-xl ring-4 ring-muted/60 transition group-hover:ring-muted/80">
-              {avatarSrc ? (
-                <AvatarImage src={avatarSrc} alt="" className="object-cover" />
-              ) : null}
-              <AvatarFallback className="text-lg font-semibold">{avatarFallback}</AvatarFallback>
-            </Avatar>
-            <span className="mt-5 flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight">{displayName}</h1>
-              <Pencil
-                className="text-muted-foreground size-4 shrink-0 opacity-60 transition group-hover:opacity-100"
-                aria-hidden
-              />
-            </span>
-            <p className="text-muted-foreground mt-1 max-w-sm text-sm">{user.email}</p>
-            <Badge variant={isAdmin ? "default" : "outline"} className="mt-3">
-              {isAdmin ? "Admin" : "Customer"}
-            </Badge>
-            <p className="text-muted-foreground mt-2 text-xs">Tap above to edit your photo and name</p>
-          </button>
-        </div>
-      </section>
+      <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-10">
+        <aside className="space-y-3 lg:col-span-4 lg:sticky lg:top-24 lg:self-start">
+          <AccountSectionLabel id="account-heading">Account</AccountSectionLabel>
+          <div className="flex flex-col items-center lg:items-stretch">
+            <button
+              type="button"
+              className="group flex w-full max-w-sm cursor-pointer flex-col items-center rounded-2xl px-4 py-2 text-center outline-none transition hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:max-w-none lg:flex-row lg:items-center lg:gap-6 lg:border lg:border-border/80 lg:bg-card/40 lg:px-6 lg:py-6 lg:text-left"
+              aria-label="Edit profile — photo and display name"
+              onClick={() => setProfileOpen(true)}
+            >
+              <Avatar className="border-background size-24 shrink-0 border-4 shadow-xl ring-4 ring-muted/60 transition group-hover:ring-muted/80 lg:size-28">
+                {avatarSrc ? (
+                  <AvatarImage src={avatarSrc} alt="" className="object-cover" />
+                ) : null}
+                <AvatarFallback className="text-lg font-semibold">{avatarFallback}</AvatarFallback>
+              </Avatar>
+              <div className="flex min-w-0 flex-1 flex-col items-center lg:items-start">
+                <span className="mt-5 flex items-center gap-2 lg:mt-0">
+                  <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">{displayName}</h1>
+                  <Pencil
+                    className="text-muted-foreground size-4 shrink-0 opacity-60 transition group-hover:opacity-100"
+                    aria-hidden
+                  />
+                </span>
+                <p className="text-muted-foreground mt-1 max-w-sm text-sm lg:max-w-none">{user.email}</p>
+                <Badge variant={isAdmin ? "default" : "outline"} className="mt-3">
+                  {isAdmin ? "Admin" : "Customer"}
+                </Badge>
+                <p className="text-muted-foreground mt-2 text-xs lg:hidden">Tap above to edit your photo and name</p>
+                <p className="text-muted-foreground mt-2 hidden text-xs lg:block">
+                  Click your profile to edit photo and display name.
+                </p>
+              </div>
+            </button>
+          </div>
+        </aside>
 
-      <section aria-labelledby="shopping-heading" className="space-y-3">
+        <div className="mt-8 space-y-6 lg:col-span-8 lg:mt-0 lg:space-y-8">
+          <section aria-labelledby="shopping-heading" className="space-y-3">
         <AccountSectionLabel id="shopping-heading">Shopping</AccountSectionLabel>
         <Card id="orders" className="border-primary/25 shadow-sm">
           <CardHeader className="pb-2">
@@ -233,9 +219,9 @@ export default function AccountPage() {
             </Button>
           </CardContent>
         </Card>
-      </section>
+          </section>
 
-      <section aria-labelledby="sharing-heading" className="space-y-3">
+          <section aria-labelledby="sharing-heading" className="space-y-3">
         <AccountSectionLabel id="sharing-heading">Sharing</AccountSectionLabel>
         <Drawer>
           <DrawerTrigger asChild>
@@ -263,49 +249,43 @@ export default function AccountPage() {
           </DrawerTrigger>
 
           <DrawerContent className="pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-            <DrawerHeader className="text-left">
-              <DrawerTitle>Share the joy</DrawerTitle>
+            <DrawerHeader className="text-center sm:text-left">
+              <DrawerTitle>Invite Friends</DrawerTitle>
               <DrawerDescription className="text-muted-foreground">
-                Copy the full message, only the link, or use your device&apos;s share sheet when available.
+                Share a quick note with friends — copy the message or use your device&apos;s share sheet.
               </DrawerDescription>
             </DrawerHeader>
-            <div className="text-muted-foreground px-4 pb-2 text-sm leading-relaxed">
-              {shareOrigin ? (
-                <p className="bg-muted/60 border-border rounded-xl border p-4 font-medium text-foreground whitespace-pre-wrap">
-                  {shareMessage}
-                </p>
-              ) : (
-                <div className="border-border bg-muted/40 space-y-2 rounded-xl border p-4" aria-busy>
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-[92%]" />
-                  <Skeleton className="h-4 w-[70%]" />
-                </div>
-              )}
+            <div className="flex flex-col items-center gap-5 px-4 pb-2">
+              <div className="flex flex-col items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- static app icon; small fixed size */}
+                <img
+                  src={SITE_ICON_192_CACHED}
+                  alt=""
+                  width={72}
+                  height={72}
+                  className="border-border size-[4.5rem] rounded-2xl border object-cover shadow-md"
+                />
+                <p className="text-foreground text-lg font-semibold tracking-tight">{storeName}</p>
+              </div>
+              <div className="border-border bg-card text-card-foreground relative w-full max-w-md rounded-xl border p-4 pr-14 text-left text-sm leading-relaxed shadow-sm">
+                <p className="text-foreground whitespace-pre-wrap">{inviteMessage}</p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute top-3 right-3 shrink-0"
+                  aria-label="Copy invite message"
+                  onClick={() => void copyInviteMessage()}
+                >
+                  <Copy className="size-4" aria-hidden />
+                </Button>
+              </div>
             </div>
             <DrawerFooter className="gap-2 pt-2">
-              <Button
-                type="button"
-                className="w-full sm:w-auto"
-                disabled={!shareOrigin}
-                onClick={() => void copyShareLink()}
-              >
-                Copy message
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full sm:w-auto"
-                disabled={!shareOrigin}
-                onClick={() => void copyShareUrlOnly()}
-              >
-                Copy link only
-              </Button>
               {typeof navigator !== "undefined" && typeof navigator.share === "function" ? (
                 <Button
                   type="button"
-                  variant="outline"
-                  className="w-full gap-2 sm:w-auto"
-                  disabled={!shareOrigin}
+                  className="w-full gap-2 bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
                   onClick={() => void nativeShare()}
                 >
                   <Share2 className="size-4" aria-hidden />
@@ -320,9 +300,9 @@ export default function AccountPage() {
             </DrawerFooter>
           </DrawerContent>
         </Drawer>
-      </section>
+          </section>
 
-      <section aria-labelledby="app-display-heading" className="space-y-3">
+          <section aria-labelledby="app-display-heading" className="space-y-3">
         <AccountSectionLabel id="app-display-heading">App &amp; display</AccountSectionLabel>
         <div className="grid gap-4 md:grid-cols-2">
           <Card id="appearance" className="border-muted/80 shadow-sm md:flex md:flex-col">
@@ -373,13 +353,13 @@ export default function AccountPage() {
 
           <AccountInstallAppCard id="install-app" footnote={installFootnote} />
         </div>
-      </section>
+          </section>
 
-      <section
-        id="more"
-        aria-labelledby="account-more-heading"
-        className="border-border space-y-3 border-t pt-6"
-      >
+          <section
+            id="more"
+            aria-labelledby="account-more-heading"
+            className="border-border space-y-3 border-t pt-6"
+          >
         <h2 id="account-more-heading" className="sr-only">
           More account actions
         </h2>
@@ -398,7 +378,9 @@ export default function AccountPage() {
             Sign out
           </Button>
         </div>
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

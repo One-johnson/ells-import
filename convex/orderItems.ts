@@ -44,6 +44,7 @@ export const create = mutation({
     unitCostCents: v.optional(v.number()),
     quantity: v.number(),
     imageUrl: v.optional(v.string()),
+    lineCbm: v.optional(v.number()),
   },
   handler: async (ctx, { sessionToken, ...row }) => {
     await requireAdmin(ctx, sessionToken);
@@ -108,6 +109,7 @@ export const bulkCreate = mutation({
         unitCostCents: v.optional(v.number()),
         quantity: v.number(),
         imageUrl: v.optional(v.string()),
+        lineCbm: v.optional(v.number()),
       }),
     ),
   },

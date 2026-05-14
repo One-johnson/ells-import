@@ -37,6 +37,7 @@ import {
   downloadAdminOrderDetailPdf,
   downloadInvoicePdfFromData,
 } from "@/components/admin/admin-order-detail-pdf";
+import { AdminPreorderOrderPanel } from "@/components/admin/admin-preorder-order-panel";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1002,6 +1003,9 @@ export function AdminOrders() {
                     ))}
                   </ul>
                 </div>
+                {detail.order.fulfillmentMode === "preorder" && sessionToken ? (
+                  <AdminPreorderOrderPanel sessionToken={sessionToken} order={detail.order} />
+                ) : null}
               </div>
             )}
           </div>

@@ -106,7 +106,16 @@ export const addItem = mutation({
     if (!product || product.status !== "active") {
       throw new Error("Product unavailable");
     }
-    if (product.stock < quantity) {
+    const mode = product.fulfillmentMode ?? "in_stock";
+    if (mode === "preorder") {
+      if (!product.preorderRoundId) {
+        throw new Error("Pre-order product is misconfigured.");
+      }
+      const round = await ctx.db.get(product.preorderRoundId);
+      if (!round || round.status !== "open") {
+        throw new Error("This pre-order round is closed; remove the item from your cart.");
+      }
+    } else if (product.stock < quantity) {
       throw new Error("Not enough stock");
     }
     let cart = await ctx.db
@@ -128,7 +137,16 @@ export const addItem = mutation({
       .unique();
     if (existing) {
       const nextQty = existing.quantity + quantity;
-      if (product.stock < nextQty) {
+      const mode = product.fulfillmentMode ?? "in_stock";
+      if (mode === "preorder") {
+        if (!product.preorderRoundId) {
+          throw new Error("Pre-order product is misconfigured.");
+        }
+        const round = await ctx.db.get(product.preorderRoundId);
+        if (!round || round.status !== "open") {
+          throw new Error("This pre-order round is closed.");
+        }
+      } else if (product.stock < nextQty) {
         throw new Error("Not enough stock");
       }
       await ctx.db.patch(existing._id, { quantity: nextQty });
@@ -158,7 +176,16 @@ export const setLineQuantity = mutation({
     if (product === null) {
       throw new Error("Product not found");
     }
-    if (product.stock < quantity) {
+    const mode = product.fulfillmentMode ?? "in_stock";
+    if (mode === "preorder") {
+      if (!product.preorderRoundId) {
+        throw new Error("Pre-order product is misconfigured.");
+      }
+      const round = await ctx.db.get(product.preorderRoundId);
+      if (!round || round.status !== "open") {
+        throw new Error("This pre-order round is closed.");
+      }
+    } else if (product.stock < quantity) {
       throw new Error("Not enough stock");
     }
     const cart = await ctx.db
@@ -202,8 +229,18 @@ export const updateLine = mutation({
       throw new Error("Forbidden");
     }
     const product = await ctx.db.get(line.productId);
-    if (product && product.stock < quantity) {
-      throw new Error("Not enough stock");
+    if (product) {
+      const mode = product.fulfillmentMode ?? "in_stock";
+      if (mode === "preorder") {
+        if (product.preorderRoundId) {
+          const round = await ctx.db.get(product.preorderRoundId);
+          if (!round || round.status !== "open") {
+            throw new Error("This pre-order round is closed.");
+          }
+        }
+      } else if (product.stock < quantity) {
+        throw new Error("Not enough stock");
+      }
     }
     await ctx.db.patch(lineId, { quantity });
     await ctx.db.patch(cart._id, { updatedAt: Date.now() });
@@ -303,7 +340,10 @@ export const bulkSetLines = mutation({
         continue;
       }
       const p = await ctx.db.get(productId);
-      if (!p || p.status !== "active" || p.stock < quantity) {
+      if (!p || p.status !== "active" || p.fulfillmentMode === "preorder") {
+        throw new Error("Invalid line");
+      }
+      if (p.stock < quantity) {
         throw new Error("Invalid line");
       }
       await ctx.db.insert("cartItems", { cartId: cart._id, productId, quantity });
@@ -348,12 +388,21 @@ export const mergeGuestLines = mutation({
       }
       const existing = await ctx.db
         .query("cartItems")
-        .withIndex("by_cart_product", (q) =>
-          q.eq("cartId", cart!._id).eq("productId", productId),
+        .withIndex("by_cart_product", (qi) =>
+          qi.eq("cartId", cart!._id).eq("productId", productId),
         )
         .unique();
       const nextQty = (existing?.quantity ?? 0) + q;
-      if (p.stock < nextQty) {
+      const mode = p.fulfillmentMode ?? "in_stock";
+      if (mode === "preorder") {
+        if (!p.preorderRoundId) {
+          continue;
+        }
+        const round = await ctx.db.get(p.preorderRoundId);
+        if (!round || round.status !== "open") {
+          continue;
+        }
+      } else if (p.stock < nextQty) {
         // Cap to available stock instead of failing the entire merge.
         if (existing) {
           await ctx.db.patch(existing._id, { quantity: p.stock });

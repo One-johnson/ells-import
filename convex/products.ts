@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { allocatePublicCode } from "./lib/publicCode";
 import { requireAdmin, resolveSession } from "./lib/sessionAuth";
-import { productStatus } from "./schema";
+import { productStatus, fulfillmentMode } from "./schema";
 import { paginationOptsValidator } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -21,9 +21,16 @@ const productFields = {
   initialStock: v.optional(v.number()),
   inStock: v.optional(v.boolean()),
   categoryId: v.optional(v.id("categories")),
+  fulfillmentMode: v.optional(fulfillmentMode),
+  preorderRoundId: v.optional(v.id("preorderRounds")),
+  cbmPerUnit: v.optional(v.number()),
 } as const;
 
 const productInput = v.object(productFields);
+
+function isShopCatalogProduct(p: Doc<"products">): boolean {
+  return (p.fulfillmentMode ?? "in_stock") === "in_stock";
+}
 
 export const searchActive = query({
   args: {
@@ -42,11 +49,12 @@ export const searchActive = query({
       .take(500);
     const out = rows.filter(
       (p) =>
-        p.name.toLowerCase().includes(term) ||
+        (p.fulfillmentMode ?? "in_stock") === "in_stock" &&
+        (p.name.toLowerCase().includes(term) ||
         p.slug.toLowerCase().includes(term) ||
         (p.description?.toLowerCase().includes(term) ?? false) ||
         (p.sku?.toLowerCase().includes(term) ?? false) ||
-        (p.publicCode?.includes(term) ?? false),
+        (p.publicCode?.includes(term) ?? false)),
     );
     const sliced = out.slice(0, limit);
     return await Promise.all(
@@ -76,6 +84,9 @@ export const getManyForCart = query({
           currency: p.currency,
           stock: p.stock,
           status: p.status,
+          fulfillmentMode: p.fulfillmentMode ?? "in_stock",
+          preorderRoundId: p.preorderRoundId,
+          cbmPerUnit: p.cbmPerUnit,
           thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
         })),
     );
@@ -95,7 +106,7 @@ export const listActive = query({
         .order("desc")
         .take(500);
       const filtered = rows
-        .filter((p) => p.status === "active")
+        .filter((p) => p.status === "active" && isShopCatalogProduct(p))
         .slice(0, limit);
       return await Promise.all(
         filtered.map(async (p) => ({
@@ -110,13 +121,42 @@ export const listActive = query({
       .query("products")
       .withIndex("by_status", (q) => q.eq("status", "active"))
       .order("desc")
-      .take(limit);
+      .take(Math.max(limit * 2, 80));
+    const filtered = rows.filter(isShopCatalogProduct).slice(0, limit);
     return await Promise.all(
-      rows.map(async (p) => ({
+      filtered.map(async (p) => ({
         ...p,
         thumbnailUrl: p.imageIds?.[0]
           ? await ctx.storage.getUrl(p.imageIds[0])
           : null,
+      })),
+    );
+  },
+});
+
+/** Active pre-order products in any currently open monthly round (China → Ghana). */
+export const listPreorderStorefront = query({
+  args: {},
+  handler: async (ctx) => {
+    const openRounds = await ctx.db
+      .query("preorderRounds")
+      .withIndex("by_status", (q) => q.eq("status", "open"))
+      .collect();
+    const openIds = new Set(openRounds.map((r) => r._id));
+    const roundById = new Map(openRounds.map((r) => [r._id, r] as const));
+    const rows = await ctx.db
+      .query("products")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(400);
+    const pre = rows.filter(
+      (p) => p.fulfillmentMode === "preorder" && p.preorderRoundId && openIds.has(p.preorderRoundId),
+    );
+    return await Promise.all(
+      pre.map(async (p) => ({
+        ...p,
+        round: p.preorderRoundId ? roundById.get(p.preorderRoundId) ?? null : null,
+        thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
       })),
     );
   },
@@ -150,7 +190,7 @@ export const listActiveExploreCatalog = query({
         .take(64);
       let n = 0;
       for (const p of rows) {
-        if (p.stock <= 0 || seen.has(p._id)) {
+        if (!isShopCatalogProduct(p) || p.stock <= 0 || seen.has(p._id)) {
           continue;
         }
         seen.add(p._id);
@@ -169,7 +209,12 @@ export const listActiveExploreCatalog = query({
       .take(150);
     let u = 0;
     for (const p of uncategorized) {
-      if (p.categoryId !== undefined || p.stock <= 0 || seen.has(p._id)) {
+      if (
+        p.categoryId !== undefined ||
+        !isShopCatalogProduct(p) ||
+        p.stock <= 0 ||
+        seen.has(p._id)
+      ) {
         continue;
       }
       seen.add(p._id);
@@ -234,7 +279,9 @@ export const listBestSellers = query({
       .map(([id]) => id as Id<"products">);
 
     const docs = await Promise.all(topIds.map((id) => ctx.db.get(id)));
-    const active = docs.filter((p): p is NonNullable<typeof p> => Boolean(p && p.status === "active"));
+    const active = docs.filter(
+      (p): p is NonNullable<typeof p> => Boolean(p && p.status === "active" && isShopCatalogProduct(p)),
+    );
 
     return await Promise.all(
       active.map(async (p) => ({
@@ -290,7 +337,9 @@ export const listTrending = query({
       .map(([id]) => id);
 
     const docs = await Promise.all(topIds.map((id) => ctx.db.get(id)));
-    const active = docs.filter((p): p is NonNullable<typeof p> => Boolean(p && p.status === "active"));
+    const active = docs.filter(
+      (p): p is NonNullable<typeof p> => Boolean(p && p.status === "active" && isShopCatalogProduct(p)),
+    );
 
     return await Promise.all(
       active.map(async (p) => ({
@@ -408,10 +457,11 @@ export const listActivePaginated = query({
                 .order(sort === "price_desc" ? "desc" : "asc");
 
     const page = await base.paginate(paginationOpts);
+    const shopPage = page.page.filter(isShopCatalogProduct);
     return {
       ...page,
       page: await Promise.all(
-        page.page.map(async (p) => ({
+        shopPage.map(async (p) => ({
           ...p,
           inStock: p.inStock ?? p.stock > 0,
           thumbnailUrl: p.imageIds?.[0] ? await ctx.storage.getUrl(p.imageIds[0]) : null,
@@ -496,14 +546,29 @@ export const create = mutation({
   args: { sessionToken: v.string(), ...productFields },
   handler: async (ctx, { sessionToken, ...args }) => {
     await requireAdmin(ctx, sessionToken);
+    const mode = args.fulfillmentMode ?? "in_stock";
+    if (mode === "preorder") {
+      if (!args.preorderRoundId) {
+        throw new Error("Pre-order products must be assigned to a round.");
+      }
+      const r = await ctx.db.get(args.preorderRoundId);
+      if (r === null || r.status !== "open") {
+        throw new Error("Pre-order round must exist and be open.");
+      }
+    } else if (args.preorderRoundId !== undefined) {
+      throw new Error("Only pre-order products can reference a round.");
+    }
     const now = Date.now();
     const publicCode = await allocatePublicCode(ctx, "products");
     const initialStock =
       args.initialStock !== undefined ? args.initialStock : Math.max(0, Math.floor(args.stock));
+    const inStock = mode === "preorder" ? true : args.inStock ?? args.stock > 0;
     return await ctx.db.insert("products", {
       ...args,
+      fulfillmentMode: mode,
+      preorderRoundId: mode === "preorder" ? args.preorderRoundId : undefined,
       costPriceCents: args.costPriceCents ?? 0,
-      inStock: args.inStock ?? args.stock > 0,
+      inStock,
       initialStock,
       publicCode,
       createdAt: now,
@@ -530,12 +595,32 @@ export const update = mutation({
     initialStock: v.optional(v.number()),
     inStock: v.optional(v.boolean()),
     categoryId: v.optional(v.union(v.id("categories"), v.null())),
+    fulfillmentMode: v.optional(fulfillmentMode),
+    preorderRoundId: v.optional(v.union(v.id("preorderRounds"), v.null())),
+    cbmPerUnit: v.optional(v.number()),
   },
   handler: async (ctx, { sessionToken, productId, ...rest }) => {
     await requireAdmin(ctx, sessionToken);
     const prev = await ctx.db.get(productId);
     if (prev === null) {
       throw new Error("Product not found");
+    }
+    const nextMode = rest.fulfillmentMode ?? prev.fulfillmentMode ?? "in_stock";
+    const nextRoundId =
+      rest.preorderRoundId === null
+        ? undefined
+        : rest.preorderRoundId !== undefined
+          ? rest.preorderRoundId
+          : prev.preorderRoundId;
+    if (nextMode === "preorder") {
+      const rid = nextRoundId;
+      if (!rid) {
+        throw new Error("Pre-order products must have a round.");
+      }
+      const r = await ctx.db.get(rid);
+      if (r === null || r.status !== "open") {
+        throw new Error("Pre-order round must exist and be open.");
+      }
     }
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     for (const [k, val] of Object.entries(rest)) {
@@ -544,6 +629,10 @@ export const update = mutation({
       }
       if (k === "categoryId" && val === null) {
         patch.categoryId = undefined;
+        continue;
+      }
+      if (k === "preorderRoundId" && val === null) {
+        patch.preorderRoundId = undefined;
         continue;
       }
       patch[k] = val;
@@ -557,7 +646,8 @@ export const update = mutation({
       }
     }
     if (rest.stock !== undefined && rest.inStock === undefined) {
-      patch.inStock = rest.stock > 0;
+      const effMode = (patch.fulfillmentMode as typeof prev.fulfillmentMode | undefined) ?? prev.fulfillmentMode ?? "in_stock";
+      patch.inStock = effMode === "preorder" ? true : rest.stock > 0;
     }
     if (rest.imageIds !== undefined) {
       const newIds = rest.imageIds ?? [];
@@ -566,6 +656,10 @@ export const update = mutation({
           await ctx.storage.delete(id);
         }
       }
+    }
+    if (patch.fulfillmentMode === "in_stock") {
+      patch.preorderRoundId = undefined;
+      patch.cbmPerUnit = undefined;
     }
     await ctx.db.patch(productId, patch);
   },

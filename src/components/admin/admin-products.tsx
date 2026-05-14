@@ -110,6 +110,9 @@ type ProductFormState = {
   stock: string;
   initialStock: string;
   categoryId: string;
+  fulfillmentMode: "in_stock" | "preorder";
+  preorderRoundId: string;
+  cbmPerUnit: string;
 };
 
 function emptyForm(): ProductFormState {
@@ -125,6 +128,9 @@ function emptyForm(): ProductFormState {
     stock: "0",
     initialStock: "",
     categoryId: "",
+    fulfillmentMode: "in_stock",
+    preorderRoundId: "",
+    cbmPerUnit: "",
   };
 }
 
@@ -141,6 +147,9 @@ function docToForm(p: Doc<"products">): ProductFormState {
     stock: String(p.stock),
     initialStock: p.initialStock === undefined ? "" : String(p.initialStock),
     categoryId: p.categoryId ?? "",
+    fulfillmentMode: p.fulfillmentMode ?? "in_stock",
+    preorderRoundId: p.preorderRoundId ?? "",
+    cbmPerUnit: p.cbmPerUnit !== undefined ? String(p.cbmPerUnit) : "",
   };
 }
 
@@ -176,6 +185,7 @@ export function AdminProducts() {
   ) as (ProductRow[] | undefined);
 
   const categories = useQuery(api.categories.listAll);
+  const openRounds = useQuery(api.preorderRounds.listOpen);
 
   const createMut = useMutation(api.products.create);
   const updateMut = useMutation(api.products.update);
@@ -415,6 +425,26 @@ export function AdminProducts() {
     }
     const categoryId =
       form.categoryId === "" ? undefined : (form.categoryId as Id<"categories">);
+    const fulfillmentMode = form.fulfillmentMode;
+    let preorderRoundId: Id<"preorderRounds"> | undefined;
+    let cbmPerUnit: number | undefined;
+    if (fulfillmentMode === "preorder") {
+      const rid = form.preorderRoundId.trim();
+      if (!rid) {
+        setErr("Select an open pre-order round.");
+        return;
+      }
+      preorderRoundId = rid as Id<"preorderRounds">;
+      const cbmRaw = form.cbmPerUnit.trim();
+      if (cbmRaw !== "") {
+        const cbm = Number.parseFloat(cbmRaw);
+        if (Number.isNaN(cbm) || cbm < 0) {
+          setErr("CBM per unit must be a non-negative number (or leave blank).");
+          return;
+        }
+        cbmPerUnit = cbm;
+      }
+    }
     setSaving(true);
     try {
       if (editingId) {
@@ -433,6 +463,9 @@ export function AdminProducts() {
           stock,
           initialStock,
           categoryId: form.categoryId === "" ? null : categoryId,
+          fulfillmentMode,
+          preorderRoundId: fulfillmentMode === "preorder" ? preorderRoundId : null,
+          cbmPerUnit: fulfillmentMode === "preorder" ? cbmPerUnit : undefined,
         });
         newSessionUploads.current.clear();
       } else {
@@ -450,6 +483,9 @@ export function AdminProducts() {
           stock,
           ...(initialStock !== undefined ? { initialStock } : {}),
           categoryId,
+          fulfillmentMode,
+          preorderRoundId: fulfillmentMode === "preorder" ? preorderRoundId : undefined,
+          cbmPerUnit: fulfillmentMode === "preorder" ? cbmPerUnit : undefined,
         });
         newSessionUploads.current.clear();
       }
@@ -1420,6 +1456,67 @@ export function AdminProducts() {
                 One specification per line; optional • prefix. AI suggests bullet-style specs.
               </p>
             </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="p-fulfillment">Fulfillment</Label>
+              <Select
+                value={form.fulfillmentMode}
+                onValueChange={(v) =>
+                  setForm((f) => ({
+                    ...f,
+                    fulfillmentMode: v as "in_stock" | "preorder",
+                  }))
+                }
+              >
+                <SelectTrigger id="p-fulfillment" className="w-full">
+                  <SelectValue placeholder="Choose fulfillment" />
+                </SelectTrigger>
+                <SelectContent className="z-[110]" position="popper" sideOffset={4}>
+                  <SelectItem value="in_stock">In stock (Ghana)</SelectItem>
+                  <SelectItem value="preorder">Pre-order (China → Ghana)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.fulfillmentMode === "preorder" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-round">Pre-order round</Label>
+                  <Select
+                    value={form.preorderRoundId || "__no_round__"}
+                    onValueChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        preorderRoundId: v === "__no_round__" ? "" : v,
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="p-round" className="w-full">
+                      <SelectValue placeholder="Select open round…" />
+                    </SelectTrigger>
+                    <SelectContent className="z-[110]" position="popper" sideOffset={4}>
+                      <SelectItem value="__no_round__">Select open round…</SelectItem>
+                      {(openRounds ?? []).map((r) => (
+                        <SelectItem key={r._id} value={r._id}>
+                          {r.label} · closes {new Date(r.closesAt).toLocaleDateString()}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="p-cbm">CBM per unit</Label>
+                  <Input
+                    id="p-cbm"
+                    inputMode="decimal"
+                    placeholder="e.g. 0.12"
+                    value={form.cbmPerUnit}
+                    onChange={(e) => setForm((f) => ({ ...f, cbmPerUnit: e.target.value }))}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Shipping after arrival = total line CBM × rate (store setting, pesewas per 1.0 CBM).
+                  </p>
+                </div>
+              </div>
+            ) : null}
             <p className="text-muted-foreground text-xs">All amounts are Ghana Cedis (GHS).</p>
             <div className="grid gap-1.5 sm:grid-cols-2 sm:gap-3">
               <div className="grid gap-1.5">
@@ -1512,7 +1609,7 @@ export function AdminProducts() {
                   <SelectTrigger id="p-status" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[110]" position="popper" sideOffset={4}>
                     {STATUSES.map((s) => (
                       <SelectItem key={s} value={s}>
                         {productStatusLabel(s)}
@@ -1533,7 +1630,7 @@ export function AdminProducts() {
                 <SelectTrigger id="p-cat" className="w-full">
                   <SelectValue placeholder="No category" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[110]" position="popper" sideOffset={4}>
                   <SelectItem value="__none__">No category</SelectItem>
                   {categories?.map((c) => (
                     <SelectItem key={c._id} value={c._id}>
