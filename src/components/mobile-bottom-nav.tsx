@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Heart, Home, ShoppingCart, User } from "lucide-react";
+import { Heart, Home, Package, ShoppingCart, User } from "lucide-react";
 
 import { useCartSummary } from "@/hooks/use-cart-summary";
 import { useAuth } from "@/providers/auth-provider";
@@ -73,6 +73,9 @@ export function MobileBottomNav() {
         }
       >
         <Home className="size-5 shrink-0 stroke-[1.75]" aria-hidden />
+      </NavItem>
+      <NavItem href="/preorders" label="Pre-order" active={pathname.startsWith("/preorders")}>
+        <Package className="size-5 shrink-0 stroke-[1.75]" aria-hidden />
       </NavItem>
       <NavItem href="/wishlist" label="Wishlist" active={pathname.startsWith("/wishlist")}>
         <Heart className="size-5 shrink-0 stroke-[1.75]" aria-hidden />

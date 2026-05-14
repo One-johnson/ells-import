@@ -37,6 +37,7 @@ export function ProductDetailContent() {
     api.wishlist.listMine,
     sessionToken ? { sessionToken } : { sessionToken: undefined },
   );
+  const openRounds = useQuery(api.preorderRounds.listOpen);
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
   const [wishlistBusy, setWishlistBusy] = useState(false);
@@ -65,13 +66,26 @@ export function ProductDetailContent() {
     return lines.length > 0 ? lines : [raw];
   }, [product?.description]);
 
-  const maxQty = product ? Math.max(0, product.stock) : 0;
+  const isPreorder = product?.fulfillmentMode === "preorder";
+  const preorderRound =
+    product && openRounds ? openRounds.find((r) => r._id === product.preorderRoundId) : undefined;
+  const maxQty = product ? (isPreorder ? 999 : Math.max(0, product.stock)) : 0;
+  const preorderCanAdd =
+    !isPreorder ||
+    openRounds === undefined ||
+    Boolean(
+      product?.preorderRoundId &&
+        openRounds?.some((r) => r._id === product.preorderRoundId && r.status === "open"),
+    );
 
   const onAddToCart = useCallback(async () => {
     if (!product) {
       return;
     }
-    if (maxQty < 1) {
+    if (!preorderCanAdd) {
+      return;
+    }
+    if (!isPreorder && maxQty < 1) {
       return;
     }
     const q = Math.min(qty, maxQty);
@@ -89,7 +103,7 @@ export function ProductDetailContent() {
     } finally {
       setAdding(false);
     }
-  }, [addItem, sessionToken, product, maxQty, qty, isAuthenticated]);
+  }, [addItem, sessionToken, product, maxQty, qty, isAuthenticated, preorderCanAdd, isPreorder]);
 
   const onToggleWishlist = useCallback(async () => {
     if (!sessionToken || !product) {
@@ -179,6 +193,29 @@ export function ProductDetailContent() {
                 </Link>
               </p>
             ) : null}
+            {isPreorder ? (
+              <div className="bg-primary/5 border-primary/20 rounded-md border px-3 py-2 text-sm">
+                {preorderRound ? (
+                  <p>
+                    <span className="font-medium">Pre-order</span> — China → Ghana. Round{" "}
+                    <span className="font-medium">{preorderRound.label}</span> closes{" "}
+                    {new Date(preorderRound.closesAt).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                    . Pay product price now; <span className="font-medium">shipping is invoiced later</span> using total
+                    CBM after arrival (typically 6–8 weeks after close).{" "}
+                    <Link href="/preorders" className="underline underline-offset-2">
+                      All pre-orders
+                    </Link>
+                  </p>
+                ) : (
+                  <p className="text-destructive font-medium">
+                    This pre-order round is closed — you cannot add this item to the cart.
+                  </p>
+                )}
+              </div>
+            ) : null}
             <h1 className="text-foreground text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1>
             {product.publicCode ? (
               <p className="text-muted-foreground font-mono text-xs tabular-nums">Ref {publicRef(product.publicCode)}</p>
@@ -194,7 +231,13 @@ export function ProductDetailContent() {
           ) : null}
 
           <p className="text-muted-foreground text-sm">
-            {maxQty < 1 ? "Out of stock" : `In stock · ${maxQty} available`}
+            {isPreorder
+              ? preorderRound
+                ? "Pre-order · unlimited until the round closes"
+                : "Pre-order · round closed"
+              : maxQty < 1
+                ? "Out of stock"
+                : `In stock · ${maxQty} available`}
           </p>
 
           {specBulletLines.length > 0 ? (
@@ -212,7 +255,7 @@ export function ProductDetailContent() {
             <p className="text-muted-foreground text-sm">…</p>
           ) : isAuthenticated && sessionToken ? (
             <div className="flex flex-wrap items-end gap-3">
-              {maxQty > 0 ? (
+              {maxQty > 0 && preorderCanAdd ? (
                 <>
                   <div className="space-y-1">
                     <label className="text-muted-foreground text-xs">Quantity</label>
@@ -224,7 +267,7 @@ export function ProductDetailContent() {
                       onChange={(n) => setQty(Math.min(maxQty, Math.max(1, n)))}
                     />
                   </div>
-                  <Button onClick={() => void onAddToCart()} disabled={adding}>
+                  <Button onClick={() => void onAddToCart()} disabled={adding || !preorderCanAdd}>
                     {adding ? "Adding…" : "Add to cart"}
                   </Button>
                 </>
@@ -246,7 +289,7 @@ export function ProductDetailContent() {
                 <Heart className={cn("size-4", inWishlist && "fill-current")} aria-hidden />
               </Button>
             </div>
-          ) : maxQty < 1 ? null : (
+          ) : maxQty < 1 && !isPreorder ? null : (
             <div className="space-y-2">
               <p className="text-muted-foreground text-sm">Sign in to add items to your cart or save them.</p>
               <div className="flex flex-wrap gap-2">
@@ -263,7 +306,7 @@ export function ProductDetailContent() {
                   </Link>
                 </Button>
               </div>
-              {maxQty > 0 ? (
+              {maxQty > 0 && preorderCanAdd ? (
                 <div className="pt-1">
                   <QuantityStepper
                     value={Math.min(qty, maxQty)}

@@ -164,6 +164,11 @@ export function AdminAppSettings() {
             <code>{STORE_SETTING.deliveryFeeCents}</code> — flat delivery in minor units (e.g. pesewas), added at
             checkout
           </li>
+          <li>
+            <code>{STORE_SETTING.preorderShippingCentsPerCbm}</code> — pre-order shipping: pesewas charged per{" "}
+            <span className="font-medium">1.0 CBM</span> (sum of line CBM on the order × this rate), invoiced after
+            arrival in Ghana
+          </li>
         </ul>
       </div>
 

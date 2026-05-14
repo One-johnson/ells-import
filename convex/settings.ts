@@ -132,6 +132,7 @@ export const storefrontSettings = query({
     const checkoutPaymentChannel =
       channelRaw.toLowerCase() === "paystack" ? ("paystack" as const) : ("whatsapp" as const);
     const deliveryFeeRaw = await getValAny("delivery_fee_cents");
+    const preorderShipRaw = await getValAny("preorder_shipping_cents_per_cbm");
     const whatsappFromDb = await getValAny("whatsapp_number");
     const instructionsFromDb = await getValAny("payment_instructions");
     return {
@@ -143,6 +144,7 @@ export const storefrontSettings = query({
       paymentInstructions: instructionsFromDb ?? DEFAULT_PAYMENT_INSTRUCTIONS,
       checkoutPaymentChannel,
       deliveryFeeCents: parseNonNegativeCents(deliveryFeeRaw),
+      preorderShippingCentsPerCbm: parseNonNegativeCents(preorderShipRaw),
     };
   },
 });

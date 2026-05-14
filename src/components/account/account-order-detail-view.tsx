@@ -30,6 +30,8 @@ export type AccountOrderDetailData = {
   order: Doc<"orders">;
   items: Doc<"orderItems">[];
   latestPayment: Doc<"payments"> | null;
+  activePayment?: Doc<"payments"> | null;
+  payments?: Doc<"payments">[];
   customer: {
     email: string;
     name?: string | null;
@@ -57,6 +59,9 @@ export function AccountOrderDetailView({
   embedded = false,
 }: AccountOrderDetailViewProps) {
   const { order, items, latestPayment, customer } = data;
+  const payments = data.payments ?? [];
+  const activePayment = data.activePayment ?? null;
+  const pay = activePayment ?? latestPayment;
   const ship = order.shippingAddress as Ship | undefined;
   const displayEmail = customer?.email ?? user?.email ?? "";
   const displayName = customer?.name ?? user?.name;
@@ -64,24 +69,30 @@ export function AccountOrderDetailView({
   const waDigits = digitsOnlyForWaMe(storefront?.whatsappNumber ?? null);
   const customerName = ship?.name ?? displayName ?? displayEmail ?? "";
   const whatsappHref =
-    waDigits && order.publicCode
+    waDigits && order.publicCode && pay
       ? whatsappMeUrl(
           waDigits,
           buildOrderWhatsAppMessage({
             orderPublicCode: order.publicCode,
-            totalCents: order.totalCents,
-            currency: order.currency,
+            totalCents: pay.amountCents,
+            currency: pay.currency,
             customerName,
             storeName: storefront?.storeName,
+            amountLabel:
+              pay.kind === "shipping"
+                ? "Shipping (CBM)"
+                : pay.kind === "items"
+                  ? "Product total"
+                  : undefined,
           }),
         )
       : null;
 
-  const showPayOnWhatsApp = Boolean(whatsappHref) && latestPayment?.status === "pending";
+  const showPayOnWhatsApp = Boolean(whatsappHref) && pay?.status === "pending";
   const canDownloadInvoicePdf =
     Boolean(order.invoiceNumber) &&
     (order.status === "paid" || order.status === "shipped" || order.status === "delivered") &&
-    latestPayment?.status === "completed";
+    (pay?.status === "completed" || latestPayment?.status === "completed");
 
   return (
     <div className="space-y-6">
@@ -159,20 +170,53 @@ export function AccountOrderDetailView({
         </div>
       )}
 
-      {latestPayment ? (
+      {order.fulfillmentMode === "preorder" ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Pre-order (China → Ghana)</CardTitle>
+            <CardDescription>
+              You paid the product price at checkout. Shipping is calculated from total CBM after goods arrive in
+              Ghana, then invoiced separately. Rounds close at the end of the 28th (UTC) each month.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-muted-foreground space-y-1 text-xs">
+            <p>
+              <span className="text-foreground font-medium">Current stage:</span>{" "}
+              {(order.preorderStage ?? "awaiting_item_payment").replace(/_/g, " ")}
+            </p>
+            {order.shippingInvoicedAt ? (
+              <p>
+                Shipping invoiced {new Date(order.shippingInvoicedAt).toLocaleDateString()} ·{" "}
+                {order.shippingPaidAt
+                  ? `Paid ${new Date(order.shippingPaidAt).toLocaleDateString()}`
+                  : "Shipping payment pending"}
+              </p>
+            ) : (
+              <p>Shipping fee has not been invoiced yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {pay ? (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Payment</CardTitle>
             <CardDescription>
-              {latestPayment.status === "pending"
+              {pay.status === "pending"
                 ? "We’re waiting to confirm your payment."
-                : `Status: ${paymentStatusLabel(latestPayment.status)}`}
+                : `Status: ${paymentStatusLabel(pay.status)}`}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <p className="text-foreground font-semibold tabular-nums">
-              {formatPrice(latestPayment.amountCents, latestPayment.currency)} ·{" "}
-              <span className="text-muted-foreground font-normal">{paymentMethodLabel(latestPayment.method)}</span>
+              {formatPrice(pay.amountCents, pay.currency)} ·{" "}
+              <span className="text-muted-foreground font-normal">{paymentMethodLabel(pay.method)}</span>
+              {pay.kind === "shipping" ? (
+                <span className="text-muted-foreground block text-xs font-normal">Shipping (CBM)</span>
+              ) : pay.kind === "items" ? (
+                <span className="text-muted-foreground block text-xs font-normal">Product total</span>
+              ) : null}
             </p>
             {showPayOnWhatsApp ? (
               <Button type="button" asChild className="w-full sm:w-auto">
@@ -187,7 +231,7 @@ export function AccountOrderDetailView({
                 </a>
               </Button>
             ) : null}
-            {!waDigits && latestPayment.status === "pending" ? (
+            {!waDigits && pay.status === "pending" ? (
               <p className="text-muted-foreground text-xs">
                 Ask the store admin to set <span className="font-mono">whatsapp_number</span> in Store settings so this
                 link appears.
@@ -197,15 +241,35 @@ export function AccountOrderDetailView({
         </Card>
       ) : null}
 
+      {payments.length > 1 ? (
+        <div className="text-muted-foreground space-y-1 text-xs">
+          <p className="text-foreground font-medium">All payments</p>
+          <ul className="list-inside list-disc">
+            {payments.map((p) => (
+              <li key={p._id}>
+                {paymentStatusLabel(p.status)} · {formatPrice(p.amountCents, p.currency)}
+                {p.kind === "shipping" ? " (shipping)" : p.kind === "items" ? " (products)" : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="bg-muted/30 rounded-lg border px-4 py-3 text-sm">
         <div className="flex justify-between gap-2">
           <span className="text-muted-foreground">Subtotal</span>
           <span className="tabular-nums">{formatPrice(order.subtotalCents, order.currency)}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span className="text-muted-foreground">Delivery</span>
+          <span className="text-muted-foreground">
+            {order.fulfillmentMode === "preorder" ? "Shipping (after arrival)" : "Delivery"}
+          </span>
           <span className="tabular-nums">
-            {order.shippingCents > 0 ? formatPrice(order.shippingCents, order.currency) : "—"}
+            {order.shippingCents > 0
+              ? formatPrice(order.shippingCents, order.currency)
+              : order.fulfillmentMode === "preorder"
+                ? "Invoiced later (CBM)"
+                : "—"}
           </span>
         </div>
         <div className="mt-2 flex justify-between gap-2 border-t pt-2 font-semibold">

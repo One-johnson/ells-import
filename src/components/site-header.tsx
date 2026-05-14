@@ -130,6 +130,12 @@ export function SiteHeader() {
             >
               Shop
             </Link>
+            <Link
+              href="/preorders"
+              className="text-muted-foreground hover:text-foreground hidden text-xs font-medium transition md:inline md:text-sm"
+            >
+              Pre-orders
+            </Link>
           </div>
 
           <div className="min-w-0 flex-1 sm:max-w-md lg:max-w-lg">

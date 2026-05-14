@@ -17,8 +17,10 @@ export const STORE_SETTING = {
   paymentInstructions: "payment_instructions",
   /** `whatsapp` (default) or `paystack` once Paystack is implemented. */
   checkoutPaymentChannel: "checkout_payment_channel",
-  /** Integer string: delivery fee in minor units (e.g. pesewas), added at checkout. */
+  /** Integer string: flat delivery in minor units (e.g. pesewas), added at checkout for in-stock orders. */
   deliveryFeeCents: "delivery_fee_cents",
+  /** Integer string: shipping in minor units per 1.0 CBM (pre-orders after arrival). */
+  preorderShippingCentsPerCbm: "preorder_shipping_cents_per_cbm",
 } as const;
 
 export type StoreSettingKey = (typeof STORE_SETTING)[keyof typeof STORE_SETTING];

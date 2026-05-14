@@ -40,6 +40,39 @@ export const backfillPublicCodes = mutation({
  * One-time (or idempotent) backfill of `inStock` for products.
  * Safe to run multiple times; only patches rows where `inStock` is undefined.
  */
+export const backfillPreorderFields = mutation({
+  args: { sessionToken: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { sessionToken, limit = 5000 }) => {
+    await requireAdmin(ctx, sessionToken);
+    let productsPatched = 0;
+    let paymentsPatched = 0;
+    const cap = Math.min(Math.max(1, limit), 20000);
+    for await (const p of ctx.db.query("products")) {
+      if (productsPatched >= cap) {
+        break;
+      }
+      if (p.fulfillmentMode === undefined) {
+        await ctx.db.patch(p._id, { fulfillmentMode: "in_stock" });
+        productsPatched++;
+      }
+    }
+    for await (const pay of ctx.db.query("payments")) {
+      if (paymentsPatched >= cap) {
+        break;
+      }
+      if (pay.kind === undefined) {
+        await ctx.db.patch(pay._id, { kind: "full" });
+        paymentsPatched++;
+      }
+    }
+    return { productsPatched, paymentsPatched };
+  },
+});
+
+/**
+ * One-time (or idempotent) backfill of `inStock` for products.
+ * Safe to run multiple times; only patches rows where `inStock` is undefined.
+ */
 export const backfillProductInStock = mutation({
   args: { sessionToken: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { sessionToken, limit = 2000 }) => {

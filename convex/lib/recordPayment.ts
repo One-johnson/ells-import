@@ -11,6 +11,7 @@ export async function insertPayment(
     currency: string;
     status: "pending" | "completed" | "failed" | "refunded";
     method: "checkout" | "manual" | "whatsapp" | "paystack" | "other";
+    kind?: "full" | "items" | "shipping";
     note?: string;
   },
 ) {
@@ -24,6 +25,7 @@ export async function insertPayment(
     currency: args.currency,
     status: args.status,
     method: args.method,
+    kind: args.kind,
     note: args.note,
     createdAt: now,
   });
